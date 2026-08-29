@@ -19,14 +19,16 @@ search:
 # These are plain redirects, deliberately. The target already knows how to
 # search itself and already knows who you are, so there is nothing to
 # integrate: a bang works the day you add it.
+#
+# A bang is for something that has its OWN search. Anything you merely want to
+# jump to belongs under `resources` below, where typing its name — or a unique
+# prefix — already gets you there. A bang pointed at an application with no
+# search endpoint produces a URL that application does not understand, which
+# fails as a page that looks broken rather than as a configuration error.
 bangs:
   - key: t
     name: Archive
     url: "https://archive.example.com/search?q={query}"
-
-  - key: w
-    name: Wishlist
-    url: "https://wishlist.example.com/?q={query}"
 
 # Things to jump to. Typing a name — or a unique prefix of one — goes straight
 # there instead of searching.
