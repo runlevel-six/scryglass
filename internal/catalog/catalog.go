@@ -150,24 +150,46 @@ func (c *Catalog) Validate() error {
 	return nil
 }
 
-// Merge combines hand-written resources with discovered ones.
+// CheckOff is the value that turns probing off for a resource that discovery
+// would otherwise supply a check for. An empty check means "say nothing"; this
+// means "deliberately do not probe".
+const CheckOff = "off"
+
+// Merge combines hand-written resources with discovered ones, field by field.
 //
-// The file wins on a collision, and that is the whole point of the precedence:
-// discovery produces a name derived from an object's name, which is often
-// close and occasionally poor ("Searxng Ingress"). Correcting one should not
-// require annotating a manifest in another repository — writing the resource
-// into your own file is a legitimate override.
+// The file wins on any field it sets, and discovery supplies the rest. It is
+// deliberately NOT a whole-record override, which is what this did first and
+// was wrong: a file entry exists to correct discovery — a better name than the
+// object's, some aliases, a sensible group — and none of those are reasons to
+// throw away the check discovery worked out. The symptom of getting this wrong
+// is silent, which is what makes it worth a comment: the tile still renders,
+// it simply never goes red again.
 //
-// Order is file entries first, then discovered ones not already claimed. The
-// tile wall reads in that order, so the things somebody bothered to write down
-// come first.
+// Retired is the one field ORed rather than overridden, because a bool cannot
+// distinguish "false" from "unset". Either source saying a thing is retired is
+// enough; nobody writes retired: true meaning "actually, do alarm about it".
+//
+// To deliberately not probe something discovery found, set check: off.
 func Merge(file, discovered []Resource) []Resource {
+	byURL := make(map[string]Resource, len(discovered))
+	for _, r := range discovered {
+		byURL[r.URL] = r
+	}
+
 	claimed := make(map[string]bool, len(file))
 
 	out := make([]Resource, 0, len(file)+len(discovered))
 
 	for _, r := range file {
 		claimed[r.URL] = true
+
+		if d, ok := byURL[r.URL]; ok {
+			r = overlay(r, d)
+		}
+
+		if strings.EqualFold(r.Check, CheckOff) {
+			r.Check = ""
+		}
 
 		out = append(out, r)
 	}
@@ -181,4 +203,31 @@ func Merge(file, discovered []Resource) []Resource {
 	}
 
 	return out
+}
+
+// overlay fills a file resource's empty fields from a discovered one.
+func overlay(file, discovered Resource) Resource {
+	if file.Name == "" {
+		file.Name = discovered.Name
+	}
+
+	if file.Group == "" {
+		file.Group = discovered.Group
+	}
+
+	if file.Icon == "" {
+		file.Icon = discovered.Icon
+	}
+
+	if file.Check == "" {
+		file.Check = discovered.Check
+	}
+
+	if len(file.Aliases) == 0 {
+		file.Aliases = discovered.Aliases
+	}
+
+	file.Retired = file.Retired || discovered.Retired
+
+	return file
 }

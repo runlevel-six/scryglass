@@ -108,13 +108,13 @@ func TestValidate(t *testing.T) {
 	}
 }
 
-func TestMerge(t *testing.T) {
+func TestMergeFillsGapsFromDiscovery(t *testing.T) {
 	file := []catalog.Resource{
-		{Name: "Search", URL: "https://search.example", Aliases: []string{"web"}},
+		{Name: "Photos", URL: "https://photos.example", Group: "media", Aliases: []string{"pics"}},
 	}
 	discovered := []catalog.Resource{
-		{Name: "Searxng Ingress", URL: "https://search.example", Check: "http://searxng.searxng.svc:8080/"},
-		{Name: "Photos", URL: "https://photos.example", Check: "http://lychee.lychee.svc:91/"},
+		{Name: "Lychee", URL: "https://photos.example", Check: "http://lychee.lychee.svc:91/"},
+		{Name: "Other", URL: "https://other.example", Check: "http://other.other.svc:80/"},
 	}
 
 	got := catalog.Merge(file, discovered)
@@ -123,14 +123,39 @@ func TestMerge(t *testing.T) {
 		t.Fatalf("got %d resources, want 2", len(got))
 	}
 
-	// The hand-written entry wins outright, including losing the discovered
-	// check — an override is an override, not a partial one.
-	if got[0].Name != "Search" {
-		t.Errorf("got[0].Name = %q, want the file's name", got[0].Name)
+	r := got[0]
+
+	// The file corrects what it set...
+	if r.Name != "Photos" || r.Group != "media" || len(r.Aliases) != 1 {
+		t.Errorf("file fields not preserved: %+v", r)
 	}
 
-	if got[1].Name != "Photos" {
-		t.Errorf("got[1].Name = %q", got[1].Name)
+	// ...and inherits what it did not. Losing the check here is the bug this
+	// test exists for: the tile keeps rendering and simply never goes red.
+	if r.Check != "http://lychee.lychee.svc:91/" {
+		t.Errorf("Check = %q, want the discovered check", r.Check)
+	}
+}
+
+func TestMergeRetiredIsSticky(t *testing.T) {
+	got := catalog.Merge(
+		[]catalog.Resource{{Name: "A", URL: "https://a.example"}},
+		[]catalog.Resource{{Name: "A", URL: "https://a.example", Retired: true}},
+	)
+
+	if !got[0].Retired {
+		t.Error("an Ingress annotated retired should stay retired through a merge")
+	}
+}
+
+func TestMergeCheckOff(t *testing.T) {
+	got := catalog.Merge(
+		[]catalog.Resource{{Name: "A", URL: "https://a.example", Check: catalog.CheckOff}},
+		[]catalog.Resource{{Name: "A", URL: "https://a.example", Check: "http://a.a.svc:80/"}},
+	)
+
+	if got[0].Check != "" {
+		t.Errorf("Check = %q, want empty: check: off means do not probe", got[0].Check)
 	}
 }
 

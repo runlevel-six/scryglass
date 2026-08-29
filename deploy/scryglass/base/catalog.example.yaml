@@ -33,6 +33,13 @@ bangs:
 # Things to jump to. Typing a name — or a unique prefix of one — goes straight
 # there instead of searching.
 #
+# An entry here CORRECTS a discovered one rather than replacing it. Match on
+# url and set only what you want to change — a better name than the Ingress
+# object's, some aliases, a group. Everything you leave out, including the
+# health check, is filled in from what was discovered.
+#
+# To deliberately not probe something that was discovered, set `check: off`.
+#
 # Ambiguity is not resolved by guessing: if two resources match equally well
 # the query falls through to search, because a confident jump to the wrong
 # application looks deliberate.
