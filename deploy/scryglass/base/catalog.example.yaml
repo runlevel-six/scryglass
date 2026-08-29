@@ -40,6 +40,12 @@ bangs:
 #
 # To deliberately not probe something that was discovered, set `check: off`.
 #
+# `check` takes a full URL, which is how you override a bad guess. Discovery
+# infers the scheme from the backend port number, and where that inference is
+# wrong there is no smarter guess available — a server that also speaks TLS on
+# its plaintext port just closes the connection, which is indistinguishable
+# from being down. Set the URL you actually want probed.
+#
 # Ambiguity is not resolved by guessing: if two resources match equally well
 # the query falls through to search, because a confident jump to the wrong
 # application looks deliberate.

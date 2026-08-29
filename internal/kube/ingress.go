@@ -135,6 +135,19 @@ func resourcesFromWithPorts(items []ingress, ports portIndex, opt Options) []cat
 
 // checkURL builds the in-cluster URL to probe, from the Ingress backend.
 func checkURL(in ingress, host, namespace, probePath string, ports portIndex) string {
+	// An absolute probe annotation replaces the derived URL entirely rather
+	// than supplying a path.
+	//
+	// Everything below this is inference — the backend Service, its port, and
+	// a scheme guessed from that port. Inference is right most of the time and
+	// there has to be a way to say otherwise, because the cases where it is
+	// wrong are not fixable by any smarter guess: a media server that also
+	// speaks TLS on its plaintext port will simply close the connection, which
+	// looks identical to being down.
+	if strings.HasPrefix(probePath, "http://") || strings.HasPrefix(probePath, "https://") {
+		return probePath
+	}
+
 	for _, rule := range in.Spec.Rules {
 		if rule.Host != host {
 			continue

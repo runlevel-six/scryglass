@@ -209,3 +209,33 @@ func TestUnresolvableNamedPortMeansNoCheck(t *testing.T) {
 		t.Error("the link should still work even with no check")
 	}
 }
+
+// An absolute probe annotation replaces the derived URL entirely. The derived
+// scheme is a guess from the port number, and where that guess is wrong there
+// is no smarter guess available — only an override.
+func TestAbsoluteProbeAnnotationWins(t *testing.T) {
+	got := resourcesFromWithPorts(
+		[]ingress{ing("plex", "plex", "media.example.com", "plex", 32400, "", map[string]string{
+			prefix + "/probe": "https://plex.plex.svc:32400/identity",
+		})},
+		portIndex{}, Options{AnnotationPrefix: prefix},
+	)
+
+	if want := "https://plex.plex.svc:32400/identity"; got[0].Check != want {
+		t.Errorf("Check = %q, want %q", got[0].Check, want)
+	}
+}
+
+// A leading slash is still a path, appended to the derived authority.
+func TestRelativeProbeAnnotationIsStillAPath(t *testing.T) {
+	got := resourcesFromWithPorts(
+		[]ingress{ing("plex", "plex", "media.example.com", "plex", 32400, "", map[string]string{
+			prefix + "/probe": "/identity",
+		})},
+		portIndex{}, Options{AnnotationPrefix: prefix},
+	)
+
+	if want := "http://plex.plex.svc:32400/identity"; got[0].Check != want {
+		t.Errorf("Check = %q, want %q", got[0].Check, want)
+	}
+}
