@@ -1,0 +1,22 @@
+# Private planning material — describes the real deployment environment and so
+# never lands in the published tree. See also: published docs are genericized.
+docs/plan.md
+docs/pending-decisions.md
+
+# Deployment overlays carry real hostnames, image digests and cluster specifics.
+deploy/overlays/
+
+# Go build output
+/scryglass
+/dist/
+*.test
+coverage.out
+
+# Local development databases
+*.db
+*.db-shm
+*.db-wal
+
+# Local environment
+.env
+.env.local
