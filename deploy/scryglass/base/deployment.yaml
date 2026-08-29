@@ -59,6 +59,12 @@ spec:
             # annotations on your Ingresses to match.
             - name: SCRYGLASS_ANNOTATION_PREFIX
               value: scryglass.local
+
+            # How far back a tile's status bar reaches. It fills at one segment
+            # per bucket and reads grey until it does, so a longer window means
+            # a wall that looks broken for longer after every deploy.
+            - name: SCRYGLASS_BAR_WINDOW
+              value: 30m
           securityContext:
             allowPrivilegeEscalation: false
             # Safe here, and checked rather than assumed: this binary writes

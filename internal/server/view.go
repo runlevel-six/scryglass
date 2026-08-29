@@ -2,7 +2,6 @@ package server
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/runlevel-six/scryglass/internal/probe"
@@ -15,7 +14,7 @@ type tile struct {
 	URL   string
 	State probe.State
 	Title string
-	Spark string
+	Bar   []Segment
 }
 
 type group struct {
@@ -28,7 +27,7 @@ type group struct {
 // Grouping preserves first-appearance order rather than sorting alphabetically:
 // the catalog file is written in the order somebody wanted to see things, and
 // re-sorting it discards that.
-func groupsFrom(statuses []probe.Status, now time.Time) []group {
+func groupsFrom(statuses []probe.Status, now time.Time, interval, window time.Duration) []group {
 	var (
 		order  []string
 		byName = map[string][]tile{}
@@ -41,7 +40,7 @@ func groupsFrom(statuses []probe.Status, now time.Time) []group {
 			order = append(order, name)
 		}
 
-		byName[name] = append(byName[name], tileFrom(s, now))
+		byName[name] = append(byName[name], tileFrom(s, now, interval, window))
 	}
 
 	out := make([]group, 0, len(order))
@@ -52,13 +51,13 @@ func groupsFrom(statuses []probe.Status, now time.Time) []group {
 	return out
 }
 
-func tileFrom(s probe.Status, now time.Time) tile {
+func tileFrom(s probe.Status, now time.Time, interval, window time.Duration) tile {
 	return tile{
 		Name:  s.Resource.Name,
 		URL:   s.Resource.URL,
 		State: s.State,
 		Title: titleFor(s, now),
-		Spark: spark(s.History),
+		Bar:   bar(s, interval, window),
 	}
 }
 
@@ -100,35 +99,102 @@ func humanize(d time.Duration) string {
 	}
 }
 
-// sparkChars are drawn from the block elements so the sparkline needs no SVG,
-// no canvas and no second request — it is text, and it inherits the tile's
-// color for free.
-const sparkChars = "▁█"
-
-// spark renders recent history as a run of blocks, most recent last.
+// barSegments is how many blocks the status bar is drawn with.
 //
-// Only the last few samples are shown. A tile is glanceable or it is not, and
-// two hundred blocks in a 40-pixel box is a smear rather than information.
-func spark(history []bool) string {
-	const width = 12
+// Chosen against the tile width rather than the data: at thirty, each block is
+// a couple of pixels in a tile narrow enough to fit four across, which is wide
+// enough to see and narrow enough that a single blip does not dominate. More
+// segments than this is a smear.
+const barSegments = 30
 
-	if len(history) < 2 {
-		return ""
+// Segment is one block of the status bar.
+type Segment struct {
+	// State is "up", "down", or "none" for a stretch with no samples yet.
+	State string
+
+	// Title is the tooltip for this block, so hovering says when.
+	Title string
+}
+
+// barFrom buckets recent history into fixed-width segments.
+//
+// A bucket is down if ANY sample in it failed, deliberately. A status bar
+// exists to show the blip; averaging a thirty-second outage away across a
+// two-minute bucket would defeat the only reason to draw one.
+//
+// Segments with no samples render as "none" rather than as up. An empty
+// history is not a healthy history, and a bar that starts fully green after a
+// restart is lying about the past hour.
+func barFrom(history []bool, interval, window time.Duration) []Segment {
+	if interval <= 0 {
+		interval = 30 * time.Second
 	}
 
-	if len(history) > width {
-		history = history[len(history)-width:]
+	wanted := int(window / interval)
+	if wanted < barSegments {
+		wanted = barSegments
 	}
 
-	var b strings.Builder
+	tail := history
+	if len(tail) > wanted {
+		tail = tail[len(tail)-wanted:]
+	}
 
-	for _, ok := range history {
-		if ok {
-			b.WriteString(sparkChars[3:])
-		} else {
-			b.WriteString(sparkChars[:3])
+	perSegment := wanted / barSegments
+	if perSegment < 1 {
+		perSegment = 1
+	}
+
+	segs := make([]Segment, barSegments)
+
+	for i := range segs {
+		// Segments are filled from the right, because the right edge is now.
+		fromRight := barSegments - 1 - i
+
+		end := len(tail) - fromRight*perSegment
+		start := end - perSegment
+
+		if start < 0 {
+			start = 0
+		}
+
+		age := time.Duration(fromRight*perSegment) * interval
+
+		switch {
+		case end <= 0 || start >= end:
+			segs[i] = Segment{State: "none", Title: "no data"}
+		default:
+			state := "up"
+
+			for _, ok := range tail[start:end] {
+				if !ok {
+					state = "down"
+					break
+				}
+			}
+
+			segs[i] = Segment{State: state, Title: state + " " + agoLabel(age)}
 		}
 	}
 
-	return b.String()
+	return segs
+}
+
+func agoLabel(age time.Duration) string {
+	if age < time.Minute {
+		return "just now"
+	}
+
+	return humanize(age) + " ago"
+}
+
+// bar is empty for anything that is not probed. A retired or unmonitored tile
+// showing an empty grey strip would invite the question of why it has no
+// history; showing nothing answers it.
+func bar(s probe.Status, interval, window time.Duration) []Segment {
+	if s.State == probe.StateRetired || s.State == probe.StateUnmonitored {
+		return nil
+	}
+
+	return barFrom(s.History, interval, window)
 }

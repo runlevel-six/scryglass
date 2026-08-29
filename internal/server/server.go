@@ -145,7 +145,7 @@ func (s *Server) data() pageData {
 
 	var groups []group
 	if s.prober != nil {
-		groups = groupsFrom(s.prober.Snapshot(), s.now())
+		groups = groupsFrom(s.prober.Snapshot(), s.now(), s.cfg.ProbeInterval, s.cfg.BarWindow)
 	}
 
 	return pageData{

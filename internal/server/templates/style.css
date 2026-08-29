@@ -39,32 +39,39 @@ input[type=search]:focus { outline: 2px solid #6b8afd; outline-offset: 1px; }
 .tiles {
   list-style: none; margin: 0; padding: 0;
   display: grid; gap: 0.5rem;
-  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  /* Wider than the name needs, because the status bar below it wants room:
+     thirty segments in a narrow tile is a smear rather than a reading. */
+  grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr));
 }
 .tile a {
-  display: flex; align-items: center; gap: 0.5rem;
-  padding: 0.6rem 0.75rem; text-decoration: none; color: var(--fg);
+  display: flex; flex-direction: column; gap: 0.5rem;
+  padding: 0.7rem 0.8rem; text-decoration: none; color: var(--fg);
   background: var(--field); border: 1px solid var(--line); border-radius: 8px;
 }
 .tile a:hover { border-color: var(--muted); }
+.head { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
 .tile .name {
-  flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  flex: 1; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   font-size: 0.9rem;
 }
 .tile .dot {
   width: 0.5rem; height: 0.5rem; border-radius: 50%;
   background: var(--muted); flex: none;
 }
-/* Shape as well as color, so the wall is readable without color vision. The
-   sparkline carries the same information a second way. */
+/* The dot carries current state; the bar carries the last hour. Both are
+   redundant with the tooltip, which is what makes this readable without
+   relying on color alone. */
 .state-up      .dot { background: #2f9e5f; }
 .state-down    .dot { background: #d1443c; box-shadow: 0 0 0 3px rgba(209,68,60,0.18); }
 .state-unknown .dot { background: #c08a2e; }
 .state-retired      { opacity: 0.45; }
 .state-retired .dot,
 .state-unmonitored .dot { background: transparent; border: 1px solid var(--muted); }
-.tile .spark {
-  font-size: 0.6rem; letter-spacing: -0.06em; color: var(--muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-.state-down .spark { color: #d1443c; }
+
+/* Status bar: one row of thin blocks, oldest left, now at the right edge. */
+.bar { display: flex; gap: 1px; height: 0.3rem; }
+.seg { flex: 1 1 0; border-radius: 1px; min-width: 0; }
+.seg-up   { background: #2f9e5f; }
+.seg-down { background: #d1443c; }
+.seg-none { background: var(--line); }

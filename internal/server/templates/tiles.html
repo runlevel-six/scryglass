@@ -5,11 +5,17 @@
   {{if .Name}}<h2 class="group">{{.Name}}</h2>{{end}}
   <ul class="tiles">
     {{range .Tiles}}
-    <li class="tile state-{{.State}}" {{if .Title}}title="{{.Title}}"{{end}}>
-      <a href="{{.URL}}">
-        <span class="dot" aria-hidden="true"></span>
-        <span class="name">{{.Name}}</span>
-        {{if .Spark}}<span class="spark" aria-hidden="true">{{.Spark}}</span>{{end}}
+    <li class="tile state-{{.State}}">
+      <a href="{{.URL}}" {{if .Title}}title="{{.Title}}"{{end}}>
+        <span class="head">
+          <span class="dot" aria-hidden="true"></span>
+          <span class="name">{{.Name}}</span>
+        </span>
+        {{if .Bar}}
+        <span class="bar" aria-hidden="true">
+          {{range .Bar}}<span class="seg seg-{{.State}}" title="{{.Title}}"></span>{{end}}
+        </span>
+        {{end}}
       </a>
     </li>
     {{end}}

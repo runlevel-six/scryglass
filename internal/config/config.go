@@ -55,6 +55,15 @@ type Config struct {
 
 	// ProbeTimeout is how long a single check may take.
 	ProbeTimeout time.Duration
+
+	// BarWindow is how far back a tile's status bar reaches.
+	//
+	// Thirty minutes rather than an hour by default, because the bar fills at
+	// one segment per bucket and until it fills it is grey: a longer window
+	// means a wall that looks broken for longer after every deploy. Note the
+	// prober keeps a bounded number of samples, so a very short probe interval
+	// paired with a long window here will never fill.
+	BarWindow time.Duration
 }
 
 // SelfHost is the host part of BaseURL.
@@ -91,6 +100,7 @@ func Load() (*Config, error) {
 	c.DiscoveryInterval, durProblems = duration("DISCOVERY_INTERVAL", 60*time.Second, durProblems)
 	c.ProbeInterval, durProblems = duration("PROBE_INTERVAL", 30*time.Second, durProblems)
 	c.ProbeTimeout, durProblems = duration("PROBE_TIMEOUT", 5*time.Second, durProblems)
+	c.BarWindow, durProblems = duration("BAR_WINDOW", 30*time.Minute, durProblems)
 
 	problems := durProblems
 

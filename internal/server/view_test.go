@@ -15,7 +15,7 @@ func TestGroupsPreserveFirstAppearanceOrder(t *testing.T) {
 		{Resource: catalog.Resource{Name: "A", Group: "media"}},
 		{Resource: catalog.Resource{Name: "B", Group: ""}},
 		{Resource: catalog.Resource{Name: "C", Group: "media"}},
-	}, now)
+	}, now, 30*time.Second, 30*time.Minute)
 
 	if len(got) != 2 {
 		t.Fatalf("got %d groups, want 2", len(got))
@@ -54,32 +54,91 @@ func TestTitleForEachState(t *testing.T) {
 	}
 }
 
-func TestSpark(t *testing.T) {
-	if got := spark([]bool{true}); got != "" {
-		t.Errorf("a single sample is not a trend, got %q", got)
+func states(segs []Segment) string {
+	var b strings.Builder
+
+	for _, sg := range segs {
+		switch sg.State {
+		case "up":
+			b.WriteByte('u')
+		case "down":
+			b.WriteByte('d')
+		default:
+			b.WriteByte('.')
+		}
 	}
 
-	got := spark([]bool{true, false, true})
-	if len([]rune(got)) != 3 {
-		t.Fatalf("spark = %q, want 3 runes", got)
-	}
+	return b.String()
+}
 
-	// Most recent last, and up and down must be distinguishable.
-	runes := []rune(got)
-	if runes[0] != runes[2] || runes[0] == runes[1] {
-		t.Errorf("spark = %q, want up/down to differ", got)
+// An empty history is not a healthy history. A bar that comes up fully green
+// after a restart is lying about the past hour.
+func TestBarWithNoHistoryIsAllUnknown(t *testing.T) {
+	got := states(barFrom(nil, 30*time.Second, 30*time.Minute))
+
+	if strings.Trim(got, ".") != "" {
+		t.Errorf("bar = %q, want every segment unknown", got)
 	}
 }
 
-// Only the tail is drawn. Two hundred blocks in a small box is a smear.
-func TestSparkIsTruncated(t *testing.T) {
-	history := make([]bool, 200)
+// Now is the right edge, so a short history fills from the right and leaves
+// the older segments blank.
+func TestBarFillsFromTheRight(t *testing.T) {
+	history := make([]bool, 8)
 	for i := range history {
 		history[i] = true
 	}
 
-	if got := len([]rune(spark(history))); got > 12 {
-		t.Errorf("spark width = %d, want at most 12", got)
+	got := states(barFrom(history, 30*time.Second, 30*time.Minute))
+
+	if !strings.HasSuffix(got, "u") {
+		t.Errorf("bar = %q, want the newest sample at the right edge", got)
+	}
+
+	if !strings.HasPrefix(got, ".") {
+		t.Errorf("bar = %q, want blank segments on the left", got)
+	}
+}
+
+// A bucket is down if ANY sample in it failed. A status bar exists to show the
+// blip; averaging a short outage away would defeat the point of drawing one.
+func TestOneFailureMarksItsBucketDown(t *testing.T) {
+	// Thirty minutes at thirty seconds is 60 samples across 30 segments: 2 per
+	// bucket. A single failure must still color its bucket.
+	history := make([]bool, 60)
+	for i := range history {
+		history[i] = true
+	}
+
+	history[0] = false
+
+	got := states(barFrom(history, 30*time.Second, 30*time.Minute))
+
+	if strings.Count(got, "d") != 1 {
+		t.Errorf("bar = %q, want exactly one down segment", got)
+	}
+
+	if !strings.HasPrefix(got, "d") {
+		t.Errorf("bar = %q, want the oldest sample in the leftmost segment", got)
+	}
+}
+
+func TestBarIsAlwaysFullWidth(t *testing.T) {
+	for _, n := range []int{0, 1, 7, 30, 120, 500} {
+		history := make([]bool, n)
+		if got := len(barFrom(history, 30*time.Second, 30*time.Minute)); got != barSegments {
+			t.Errorf("history of %d gave %d segments, want %d", n, got, barSegments)
+		}
+	}
+}
+
+// Retired and unmonitored tiles get no bar at all. An empty grey strip would
+// invite the question of why it has no history; showing nothing answers it.
+func TestNoBarForUnprobedStates(t *testing.T) {
+	for _, st := range []probe.State{probe.StateRetired, probe.StateUnmonitored} {
+		if got := bar(probe.Status{State: st}, 30*time.Second, 30*time.Minute); got != nil {
+			t.Errorf("state %q got a bar of %d segments, want none", st, len(got))
+		}
 	}
 }
 
