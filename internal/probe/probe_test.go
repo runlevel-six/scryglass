@@ -228,3 +228,37 @@ func TestUnreachableIsDown(t *testing.T) {
 		t.Error("a down tile should carry why")
 	}
 }
+
+// Discovery adding a tile is as much a reason to redraw as one changing color.
+// Without this a newly deployed application does not appear until something
+// unrelated happens to flip.
+func TestSetResourcesNotifiesWhenTheSetChanges(t *testing.T) {
+	p := probe.New(probe.Options{})
+	p.SetResources([]catalog.Resource{{Name: "A", URL: "https://a.example"}})
+
+	ch, cancel := p.Subscribe()
+	defer cancel()
+
+	p.SetResources([]catalog.Resource{
+		{Name: "A", URL: "https://a.example"},
+		{Name: "B", URL: "https://b.example"},
+	})
+
+	select {
+	case <-ch:
+	case <-time.After(time.Second):
+		t.Fatal("adding a resource did not notify")
+	}
+
+	// The same set again is not news.
+	p.SetResources([]catalog.Resource{
+		{Name: "A", URL: "https://a.example"},
+		{Name: "B", URL: "https://b.example"},
+	})
+
+	select {
+	case <-ch:
+		t.Fatal("notified when the resource set had not changed")
+	case <-time.After(200 * time.Millisecond):
+	}
+}

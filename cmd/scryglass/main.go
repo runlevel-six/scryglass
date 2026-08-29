@@ -55,6 +55,7 @@ func run() error {
 	prober := probe.New(probe.Options{
 		Interval: cfg.ProbeInterval,
 		Timeout:  cfg.ProbeTimeout,
+		Logger:   log,
 	})
 
 	srv, err := server.New(cfg, cat, prober, log)

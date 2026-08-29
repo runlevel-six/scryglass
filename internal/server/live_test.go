@@ -141,3 +141,42 @@ func TestEventStreamPushesOnStateChange(t *testing.T) {
 
 	t.Fatal("no tiles event arrived before the stream ended")
 }
+
+// A client that connects after the state has already settled must still be
+// told what the state is. Without this, a page opened moments before the first
+// probe completes shows "unknown" until something unrelated happens to change,
+// which reads as a stuck dashboard.
+func TestEventStreamSyncsOnConnect(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	defer backend.Close()
+
+	p := probe.New(probe.Options{})
+	p.SetResources([]catalog.Resource{{Name: "A", URL: "https://a.example", Check: backend.URL}})
+	p.RunOnce(context.Background()) // settle before anyone is listening
+
+	srv := httptest.NewServer(newLiveServer(t, p))
+	defer srv.Close()
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL+"/events", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		if strings.HasPrefix(scanner.Text(), "event: tiles") {
+			return
+		}
+	}
+
+	t.Fatal("no event on connect; a late client would never learn the current state")
+}

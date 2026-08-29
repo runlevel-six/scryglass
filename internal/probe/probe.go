@@ -10,6 +10,7 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
@@ -79,6 +80,7 @@ type Prober struct {
 	client   *http.Client
 	interval time.Duration
 	now      func() time.Time
+	log      *slog.Logger
 
 	mu      sync.RWMutex
 	entries map[string]*entry // keyed by resource URL, which is unique per tile
@@ -93,6 +95,7 @@ type Options struct {
 	Interval time.Duration
 	Timeout  time.Duration
 	Now      func() time.Time // injectable for tests
+	Logger   *slog.Logger
 }
 
 // New builds a Prober.
@@ -109,9 +112,14 @@ func New(opt Options) *Prober {
 		opt.Now = time.Now
 	}
 
+	if opt.Logger == nil {
+		opt.Logger = slog.New(slog.DiscardHandler)
+	}
+
 	return &Prober{
 		interval: opt.Interval,
 		now:      opt.Now,
+		log:      opt.Logger,
 		entries:  make(map[string]*entry),
 		subs:     make(map[chan struct{}]struct{}),
 		client: &http.Client{
@@ -168,8 +176,26 @@ func (p *Prober) SetResources(resources []catalog.Resource) {
 		next[r.URL] = &entry{res: r, state: initialState(r), since: p.now()}
 	}
 
+	changed := len(order) != len(p.order)
+
+	if !changed {
+		for i, url := range order {
+			if p.order[i] != url {
+				changed = true
+				break
+			}
+		}
+	}
+
 	p.entries = next
 	p.order = order
+
+	if changed {
+		// Discovery adding or removing a tile is as much a reason to redraw as
+		// one changing color. Without this, a newly deployed application does
+		// not appear until something unrelated happens to flip.
+		defer p.notify()
+	}
 }
 
 // initialState is what a resource looks like before it has ever been probed.
@@ -292,6 +318,14 @@ func (p *Prober) probeOne(ctx context.Context, e *entry) bool {
 	if prev != state {
 		e.state = state
 		e.since = start
+
+		// Logged because a tooltip is not a record. Without this, the only
+		// place a failure reason ever appears is a hover on a page somebody
+		// has to be looking at, which is no help at all when working out why
+		// something went red an hour ago.
+		p.log.Info("resource state changed",
+			"name", e.res.Name, "from", prev, "to", state,
+			"check", url, "error", errText)
 
 		return true
 	}

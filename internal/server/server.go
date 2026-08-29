@@ -213,6 +213,17 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	events, cancel := s.prober.Subscribe()
 	defer cancel()
 
+	// Sync on connect, always.
+	//
+	// This is the bug that made tiles look stuck: a client that connects after
+	// a state change has already happened hears nothing further until the next
+	// one, so a page opened moments before the first probe completes sits
+	// showing "unknown" until something else moves. Sending one event
+	// immediately costs a single fetch and makes every new connection
+	// self-correcting.
+	fmt.Fprint(w, "event: tiles\ndata: 1\n\n")
+	flusher.Flush()
+
 	// A heartbeat, so that an idle stream is not mistaken for a dead one by
 	// anything between here and the browser. A comment frame is valid SSE and
 	// the client ignores it.
