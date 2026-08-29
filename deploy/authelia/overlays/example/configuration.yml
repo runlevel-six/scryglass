@@ -16,6 +16,19 @@ theme: 'auto'
 server:
   address: 'tcp://:9091/'
 
+  # Required because the container runs with readOnlyRootFilesystem: true.
+  #
+  # The image sets WORKDIR /app and ships both healthcheck.sh and a writable
+  # .healthcheck.env, so Authelia writes health-check variables there at
+  # startup. On a read-only root that write fails and startup checks abort —
+  # and because it is not a *provider* check, Authelia logs only the generic
+  # "Errors occurred performing startup checks" with no detail at any log level.
+  #
+  # Nothing is lost by disabling it: that file exists to serve the Docker
+  # HEALTHCHECK directive, which Kubernetes ignores in favour of the liveness
+  # and readiness probes on /api/health.
+  disable_healthcheck: true
+
 log:
   level: 'info'
   format: 'text'
@@ -38,6 +51,20 @@ totp:
 webauthn:
   disable: false
   enable_passkey_login: true
+
+  # A passkey login counts as ONE factor by default. If any rule requires
+  # two_factor — and at least one must, or WebAuthn registration is hidden
+  # entirely — then signing in with a passkey is followed by a prompt for a
+  # second factor, which Authelia will happily accept as the password
+  # (/api/secondfactor/password).
+  #
+  # Uncommenting this makes a user-verified passkey satisfy both factors in one
+  # step. It is EXPERIMENTAL and its own description says it WILL be removed;
+  # when that happens the password prompt simply returns. Pair it with
+  # user_verification: 'required' or verification may not be performed and the
+  # option has no effect.
+  #
+  # experimental_enable_passkey_uv_two_factors: true
   display_name: 'Example'
 
   selection_criteria:
@@ -56,7 +83,7 @@ webauthn:
 
 authentication_backend:
   file:
-    path: '/etc/authelia/users_database.yml'
+    path: '/etc/authelia/users/users_database.yml'
 
     # Re-reads the users file when it changes, so adding a user is editing the
     # Secret rather than restarting the pod. Kubernetes propagates a Secret
@@ -85,6 +112,18 @@ authentication_backend:
     disable: true
   password_change:
     disable: true
+
+identity_validation:
+  elevated_session:
+    # Adding or removing a credential — a passkey included — requires an
+    # elevated session, proven with a One-Time Code sent through the notifier.
+    #
+    # The default lifespan is 5 minutes, which assumes the code arrives by
+    # email. Here "delivery" is `kubectl exec ... cat /config/notification.txt`,
+    # so the default turns enrolment into a race. Widened deliberately: the code
+    # is readable only by someone who already has cluster-admin on the node it
+    # is written to, so the extra minutes cost nothing.
+    code_lifespan: '15 minutes'
 
 access_control:
   # Deny is also Authelia's own default. Stated explicitly because it is the
@@ -129,6 +168,20 @@ access_control:
         - 'group:family'
         - 'group:admins'
 
+    # At least one rule MUST require two_factor, or Authelia hides WebAuthn
+    # credential registration completely — the settings page shows "There are
+    # no protected applications that require a second factor method" and a
+    # passkey can never be enrolled. Point it at whatever genuinely deserves
+    # two factors.
+    #
+    # A passkey satisfies one_factor, not two_factor, unless
+    # webauthn.experimental_enable_passkey_uv_two_factors is set — an option
+    # whose own description says it WILL be removed. Do not depend on it.
+    - domain: 'admin.example.com'
+      policy: 'two_factor'
+      subject:
+        - 'group:admins'
+
     # ---- Tier 3: everything else, admins only.
     #
     # A wildcard rather than a list, so a newly deployed app is protected the
@@ -143,10 +196,10 @@ access_control:
     # above is refused.
 
 session:
-  # Only actually used with Redis, but the schema wants it and a single-replica
-  # deployment may not stay single-replica.
-  secret: 'replaced-by-AUTHELIA_SESSION_SECRET_FILE'
-
+  # secret is deliberately absent. It is supplied by
+  # AUTHELIA_SESSION_SECRET_FILE, and Authelia rejects a secret defined in two
+  # configuration sources — a placeholder here is a startup failure, not a
+  # harmless default.
   cookies:
     - name: 'authelia_session'
 

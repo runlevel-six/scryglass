@@ -18,8 +18,30 @@ spec:
       labels:
         app.kubernetes.io/name: authelia
     spec:
+      # Kubernetes injects legacy service-link env vars for every Service in the
+      # namespace — AUTHELIA_SERVICE_PORT, AUTHELIA_PORT_9091_TCP and so on.
+      # Authelia reads its own configuration from AUTHELIA_-prefixed env vars,
+      # so it parses those as config: they synthesise a deprecated `port` key,
+      # which then collides with server.address and kills startup.
+      #
+      # The collision exists because the Service is named `authelia` in a
+      # namespace of the same name. Turning the links off is the fix that keeps
+      # the obvious name.
+      enableServiceLinks: false
       securityContext:
+        # An explicit UID is required, not just runAsNonRoot. The upstream image
+        # inherits from authelia/base and declares no USER, so it would run as
+        # root; the kubelet then has nothing to verify against runAsNonRoot and
+        # refuses to create the container with CreateContainerConfigError.
+        #
+        # The UID itself is arbitrary — the binary only needs to read its config
+        # and write /config — but fsGroup must match, or the PVC lands owned by
+        # root and Authelia cannot create its database.
         runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: 'OnRootMismatch'
         seccompProfile:
           type: RuntimeDefault
       containers:
@@ -27,7 +49,7 @@ spec:
           image: ghcr.io/authelia/authelia:4.39.20
           args:
             - '--config'
-            - '/etc/authelia/configuration.yml'
+            - '/etc/authelia/config/configuration.yml'
           ports:
             - name: http
               containerPort: 9091
@@ -49,13 +71,16 @@ spec:
             capabilities:
               drop: ['ALL']
           volumeMounts:
+            # Mounted as directories, deliberately. A subPath mount is resolved
+            # once at container start and never updated, so `watch: true` on the
+            # users file would never fire — adding a user would silently do
+            # nothing until the Deployment was rolled. Directory mounts are
+            # updated by symlink swap and do propagate.
             - name: config
-              mountPath: /etc/authelia/configuration.yml
-              subPath: configuration.yml
+              mountPath: /etc/authelia/config
               readOnly: true
             - name: users
-              mountPath: /etc/authelia/users_database.yml
-              subPath: users_database.yml
+              mountPath: /etc/authelia/users
               readOnly: true
             - name: secrets
               mountPath: /secrets
