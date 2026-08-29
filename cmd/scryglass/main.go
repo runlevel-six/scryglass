@@ -26,6 +26,18 @@ func main() {
 }
 
 func run() error {
+	// One subcommand, and it exists to be checked rather than read: CI runs
+	// `docker run --rm <image> version` against a freshly published image and
+	// fails the release if the binary does not report the tag it was published
+	// under. That catches a stale layer or a build that silently lost its
+	// -ldflags stamp, which otherwise ships looking fine.
+	if len(os.Args) > 1 && os.Args[1] == "version" {
+		fmt.Printf("scryglass %s\ncommit: %s\nbuilt:  %s\n",
+			version.Version, version.Commit, version.Date)
+
+		return nil
+	}
+
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
 	cfg, err := config.Load()

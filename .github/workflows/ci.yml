@@ -128,3 +128,87 @@ jobs:
             echo "::error::binary did not start; expected a configuration error"
             exit 1
           fi
+
+  publish:
+    name: Publish image
+    runs-on: ubuntu-latest
+    # Only after everything that can say the build is broken has said
+    # otherwise. An image that fails its own checks is worse than no image: it
+    # looks deployable.
+    needs: [test, lint, image]
+    if: github.event_name == 'push'
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Tags and full history, because the version is `git describe` and a
+          # shallow clone has neither. Without this an edge build reports a
+          # bare commit and a release build cannot confirm it is on the tag it
+          # claims to be.
+          fetch-depth: 0
+
+      - name: Derive the version
+        id: version
+        run: |
+          version=$(git describe --tags --match 'v[0-9]*' --always)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Version: $version"
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # A published release is immutable. Moving one means anybody who already
+      # pulled it has different bytes under the same name, and no way to know.
+      - name: Refuse to republish an existing release
+        if: github.ref_type == 'tag'
+        run: |
+          if docker manifest inspect "ghcr.io/${{ github.repository }}:${{ github.ref_name }}" >/dev/null 2>&1; then
+            echo "::error::ghcr.io/${{ github.repository }}:${{ github.ref_name }} already exists." \
+                 "Releases are never republished — cut the next patch instead."
+            exit 1
+          fi
+          echo "${{ github.ref_name }} has not been published before."
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          flavor: latest=false
+          tags: |
+            type=raw,value=${{ github.ref_name }},enable=${{ github.ref_type == 'tag' }}
+            type=raw,value=latest,enable=${{ github.ref_type == 'tag' && !contains(github.ref_name, '-') }}
+            type=raw,value=edge,enable={{is_default_branch}}
+            type=sha,format=long
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+            COMMIT=${{ github.sha }}
+            DATE=${{ github.event.head_commit.timestamp }}
+          provenance: false
+
+      # The stamp is injected by -ldflags, so nothing else in this workflow
+      # would notice if it were lost — the image would build, run and serve,
+      # reporting "dev" forever.
+      - name: The image must report the tag it was published under
+        if: github.ref_type == 'tag'
+        run: |
+          image="ghcr.io/${{ github.repository }}:${{ github.ref_name }}"
+          reported=$(docker run --rm "$image" version)
+          echo "$reported"
+          if ! echo "$reported" | grep -q "${{ github.ref_name }}"; then
+            echo "::error::image reports '$reported', expected ${{ github.ref_name }}"
+            exit 1
+          fi
