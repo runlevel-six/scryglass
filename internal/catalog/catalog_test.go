@@ -107,3 +107,40 @@ func TestValidate(t *testing.T) {
 		})
 	}
 }
+
+func TestMerge(t *testing.T) {
+	file := []catalog.Resource{
+		{Name: "Search", URL: "https://search.example", Aliases: []string{"web"}},
+	}
+	discovered := []catalog.Resource{
+		{Name: "Searxng Ingress", URL: "https://search.example", Check: "http://searxng.searxng.svc:8080/"},
+		{Name: "Photos", URL: "https://photos.example", Check: "http://lychee.lychee.svc:91/"},
+	}
+
+	got := catalog.Merge(file, discovered)
+
+	if len(got) != 2 {
+		t.Fatalf("got %d resources, want 2", len(got))
+	}
+
+	// The hand-written entry wins outright, including losing the discovered
+	// check — an override is an override, not a partial one.
+	if got[0].Name != "Search" {
+		t.Errorf("got[0].Name = %q, want the file's name", got[0].Name)
+	}
+
+	if got[1].Name != "Photos" {
+		t.Errorf("got[1].Name = %q", got[1].Name)
+	}
+}
+
+func TestMergeKeepsFileOrderFirst(t *testing.T) {
+	got := catalog.Merge(
+		[]catalog.Resource{{Name: "B", URL: "https://b.example"}},
+		[]catalog.Resource{{Name: "A", URL: "https://a.example"}},
+	)
+
+	if got[0].Name != "B" {
+		t.Errorf("written-down resources should come first, got %q", got[0].Name)
+	}
+}

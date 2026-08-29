@@ -1,0 +1,49 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: scryglass
+  labels:
+    app.kubernetes.io/name: scryglass
+---
+# The only privileged thing this application wants, and it is worth being
+# deliberate about because the application is internet-facing.
+#
+# Read-only, and only two resources. Ingresses are the tile list — every
+# service already declares its own canonical address there, which is what makes
+# the wall maintain itself. Services exist solely to turn a named backend port
+# into a number: an Ingress may say the port is called "http", a name cannot go
+# in a URL, and the number is not guessable — one common service calls port
+# 9091 "http", so assuming 80 would probe a closed port and report a healthy
+# application as down.
+#
+# Note what is absent. No pods, no secrets, no configmaps, no write verbs
+# anywhere. A compromise of this ServiceAccount yields the list of hostnames
+# already published in DNS.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: scryglass-discovery
+  labels:
+    app.kubernetes.io/name: scryglass
+rules:
+  - apiGroups: ['networking.k8s.io']
+    resources: ['ingresses']
+    verbs: ['list']
+  - apiGroups: ['']
+    resources: ['services']
+    verbs: ['list']
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: scryglass-discovery
+  labels:
+    app.kubernetes.io/name: scryglass
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: scryglass-discovery
+subjects:
+  - kind: ServiceAccount
+    name: scryglass
+    namespace: scryglass

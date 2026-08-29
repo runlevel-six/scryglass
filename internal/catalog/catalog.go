@@ -149,3 +149,36 @@ func (c *Catalog) Validate() error {
 
 	return nil
 }
+
+// Merge combines hand-written resources with discovered ones.
+//
+// The file wins on a collision, and that is the whole point of the precedence:
+// discovery produces a name derived from an object's name, which is often
+// close and occasionally poor ("Searxng Ingress"). Correcting one should not
+// require annotating a manifest in another repository — writing the resource
+// into your own file is a legitimate override.
+//
+// Order is file entries first, then discovered ones not already claimed. The
+// tile wall reads in that order, so the things somebody bothered to write down
+// come first.
+func Merge(file, discovered []Resource) []Resource {
+	claimed := make(map[string]bool, len(file))
+
+	out := make([]Resource, 0, len(file)+len(discovered))
+
+	for _, r := range file {
+		claimed[r.URL] = true
+
+		out = append(out, r)
+	}
+
+	for _, r := range discovered {
+		if claimed[r.URL] {
+			continue
+		}
+
+		out = append(out, r)
+	}
+
+	return out
+}

@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 )
 
 // Prefix is prepended to every environment variable name.
@@ -35,6 +36,38 @@ type Config struct {
 
 	// Title is what the page calls itself.
 	Title string
+
+	// Discovery turns on reading Ingress objects from the cluster. Off by
+	// default so the binary runs anywhere: outside Kubernetes it should
+	// degrade to a working omnibox over the file, not fail to start.
+	Discovery bool
+
+	// AnnotationPrefix is the annotation namespace discovery reads, without a
+	// trailing slash. Configurable because it is written into other people's
+	// manifests, and baking one project's domain in would be rude.
+	AnnotationPrefix string
+
+	// DiscoveryInterval is how often the cluster is re-read.
+	DiscoveryInterval time.Duration
+
+	// ProbeInterval is how often each resource is checked.
+	ProbeInterval time.Duration
+
+	// ProbeTimeout is how long a single check may take.
+	ProbeTimeout time.Duration
+}
+
+// SelfHost is the host part of BaseURL.
+//
+// Discovery skips it: Scryglass has an Ingress like everything else, and a
+// tile linking to the page you are already looking at is noise.
+func (c *Config) SelfHost() string {
+	u, err := url.Parse(c.BaseURL)
+	if err != nil {
+		return ""
+	}
+
+	return u.Host
 }
 
 // Load reads configuration, or reports every problem it found at once.
@@ -48,9 +81,18 @@ func Load() (*Config, error) {
 		CatalogPath: os.Getenv(Prefix + "CATALOG"),
 		BaseURL:     strings.TrimRight(os.Getenv(Prefix+"BASE_URL"), "/"),
 		Title:       envOr("TITLE", "Scryglass"),
+
+		Discovery:        isTrue(os.Getenv(Prefix + "DISCOVERY")),
+		AnnotationPrefix: strings.TrimSuffix(envOr("ANNOTATION_PREFIX", "scryglass.local"), "/"),
 	}
 
-	var problems []string
+	var durProblems []string
+
+	c.DiscoveryInterval, durProblems = duration("DISCOVERY_INTERVAL", 60*time.Second, durProblems)
+	c.ProbeInterval, durProblems = duration("PROBE_INTERVAL", 30*time.Second, durProblems)
+	c.ProbeTimeout, durProblems = duration("PROBE_TIMEOUT", 5*time.Second, durProblems)
+
+	problems := durProblems
 
 	if c.CatalogPath == "" {
 		problems = append(problems, Prefix+"CATALOG is required (path to the catalog file)")
@@ -71,6 +113,35 @@ func Load() (*Config, error) {
 	}
 
 	return c, nil
+}
+
+// duration parses a duration variable, collecting rather than returning the
+// problem so that Load can report every complaint at once.
+func duration(name string, fallback time.Duration, problems []string) (time.Duration, []string) {
+	raw := os.Getenv(Prefix + name)
+	if raw == "" {
+		return fallback, problems
+	}
+
+	d, err := time.ParseDuration(raw)
+	if err != nil {
+		return fallback, append(problems, Prefix+name+" is not a duration (try 30s, 2m): "+raw)
+	}
+
+	if d <= 0 {
+		return fallback, append(problems, Prefix+name+" must be positive")
+	}
+
+	return d, problems
+}
+
+func isTrue(s string) bool {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "true", "yes", "1":
+		return true
+	default:
+		return false
+	}
 }
 
 func envOr(name, fallback string) string {

@@ -2,7 +2,8 @@
 //
 // It is deliberately thin. Every routing decision belongs to internal/router,
 // which is pure and tested without a server; this package turns a Decision
-// into a redirect and renders one page.
+// into a redirect, renders one page, and pushes a notification when a tile
+// changes state.
 package server
 
 import (
@@ -13,37 +14,45 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/runlevel-six/scryglass/internal/catalog"
 	"github.com/runlevel-six/scryglass/internal/config"
+	"github.com/runlevel-six/scryglass/internal/probe"
 	"github.com/runlevel-six/scryglass/internal/router"
 )
 
 //go:embed templates
 var templatesFS embed.FS
 
-// Server serves the omnibox.
+// Server serves the omnibox and the tile wall.
 type Server struct {
-	cfg  *config.Config
-	cat  *catalog.Catalog
-	rtr  *router.Router
-	log  *slog.Logger
-	tmpl *template.Template
+	cfg    *config.Config
+	log    *slog.Logger
+	tmpl   *template.Template
+	prober *probe.Prober
+	now    func() time.Time
 
-	// page is the fully rendered index, built once at startup.
-	//
-	// This is a new-tab page and the budget is one paint. Nothing on it
-	// depends on the request, so rendering per request would be work done
-	// thousands of times to produce identical bytes.
-	page []byte
+	css template.CSS
+	js  template.JS
 
-	// descriptor is the OpenSearch document, likewise built once.
+	// descriptor is the OpenSearch document. It is the one thing still built
+	// once, because nothing in it can change while the process runs.
 	descriptor []byte
+
+	mu  sync.RWMutex
+	cat *catalog.Catalog
+	rtr *router.Router
 }
 
-// New builds a Server and pre-renders everything that does not vary per request.
-func New(cfg *config.Config, cat *catalog.Catalog, log *slog.Logger) (*Server, error) {
-	tmpl, err := template.ParseFS(templatesFS, "templates/index.html", "templates/opensearch.xml")
+// New builds a Server.
+//
+// The prober may be nil, in which case no tiles are rendered and no events are
+// pushed — which is exactly M1's behavior, and worth keeping reachable.
+func New(cfg *config.Config, cat *catalog.Catalog, prober *probe.Prober, log *slog.Logger) (*Server, error) {
+	tmpl, err := template.ParseFS(templatesFS,
+		"templates/index.html", "templates/tiles.html", "templates/opensearch.xml")
 	if err != nil {
 		return nil, fmt.Errorf("parse templates: %w", err)
 	}
@@ -53,29 +62,27 @@ func New(cfg *config.Config, cat *catalog.Catalog, log *slog.Logger) (*Server, e
 		return nil, fmt.Errorf("read stylesheet: %w", err)
 	}
 
-	s := &Server{cfg: cfg, cat: cat, rtr: router.New(cat), log: log, tmpl: tmpl}
-
-	var page, descriptor strings.Builder
-
-	err = tmpl.ExecuteTemplate(&page, "index.html", struct {
-		Title      string
-		SearchName string
-		CSS        template.CSS
-		Bangs      []catalog.Bang
-	}{
-		Title:      cfg.Title,
-		SearchName: labelOr(cat.Search.Name, "the web"),
-		// The stylesheet is ours, embedded from templates/ at build time and
-		// never derived from a request; without this conversion it would be
-		// escaped into unusable text inside the <style> element. gosec cannot
-		// see where the bytes came from, only that the conversion bypasses
-		// escaping — which is exactly what is intended here.
-		CSS:   template.CSS(css), //nolint:gosec // G203: embedded asset, not user input
-		Bangs: cat.Bangs,
-	})
+	js, err := templatesFS.ReadFile("templates/live.js")
 	if err != nil {
-		return nil, fmt.Errorf("render index: %w", err)
+		return nil, fmt.Errorf("read script: %w", err)
 	}
+
+	s := &Server{
+		cfg:    cfg,
+		log:    log,
+		tmpl:   tmpl,
+		prober: prober,
+		now:    time.Now,
+		// Both are ours, embedded at build time and never derived from a
+		// request; without these conversions they would be escaped into
+		// unusable text inside their elements.
+		css: template.CSS(css), //nolint:gosec // G203: embedded asset, not user input
+		js:  template.JS(js),   //nolint:gosec // G203: embedded asset, not user input
+		cat: cat,
+		rtr: router.New(cat),
+	}
+
+	var descriptor strings.Builder
 
 	err = tmpl.ExecuteTemplate(&descriptor, "opensearch.xml", struct {
 		Title   string
@@ -85,10 +92,25 @@ func New(cfg *config.Config, cat *catalog.Catalog, log *slog.Logger) (*Server, e
 		return nil, fmt.Errorf("render opensearch descriptor: %w", err)
 	}
 
-	s.page = []byte(page.String())
 	s.descriptor = []byte(descriptor.String())
 
 	return s, nil
+}
+
+// SetResources replaces the routable resources and rebuilds the router.
+//
+// Called by the discovery loop on every pass. The search and bang
+// configuration is untouched: those come from the file and the cluster has no
+// opinion about them.
+func (s *Server) SetResources(resources []catalog.Resource) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	next := *s.cat
+	next.Resources = resources
+
+	s.cat = &next
+	s.rtr = router.New(&next)
 }
 
 // Handler returns the routes.
@@ -97,6 +119,8 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("GET /{$}", s.handleIndex)
 	mux.HandleFunc("GET /search", s.handleSearch)
+	mux.HandleFunc("GET /tiles", s.handleTiles)
+	mux.HandleFunc("GET /events", s.handleEvents)
 	mux.HandleFunc("GET /opensearch.xml", s.handleDescriptor)
 	mux.HandleFunc("GET /healthz", s.handleHealth)
 	mux.HandleFunc("GET /readyz", s.handleHealth)
@@ -104,18 +128,122 @@ func (s *Server) Handler() http.Handler {
 	return mux
 }
 
+// pageData is everything the index template needs.
+type pageData struct {
+	Title      string
+	SearchName string
+	CSS        template.CSS
+	JS         template.JS
+	Bangs      []catalog.Bang
+	Groups     []group
+}
+
+func (s *Server) data() pageData {
+	s.mu.RLock()
+	cat := s.cat
+	s.mu.RUnlock()
+
+	var groups []group
+	if s.prober != nil {
+		groups = groupsFrom(s.prober.Snapshot(), s.now())
+	}
+
+	return pageData{
+		Title:      s.cfg.Title,
+		SearchName: labelOr(cat.Search.Name, "the web"),
+		CSS:        s.css,
+		JS:         s.js,
+		Bangs:      cat.Bangs,
+		Groups:     groups,
+	}
+}
+
+// handleIndex renders the page.
+//
+// Rendered per request rather than cached, now that it carries live state.
+// An earlier version served pre-rendered bytes to protect the new-tab budget;
+// that budget is spent on round trips, not on executing a template over a few
+// dozen tiles, and a cache here would only be somewhere for stale state to
+// hide.
 func (s *Server) handleIndex(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	// No caching. The page is cheap to produce and, from M2, its contents
-	// change when the cluster does; a stale new-tab page showing a service
-	// that no longer exists is the failure this project set out to end.
 	w.Header().Set("Cache-Control", "no-store")
-	writeAll(w, s.page, s.log)
+
+	if err := s.tmpl.ExecuteTemplate(w, "index.html", s.data()); err != nil {
+		s.log.Error("render index", "error", err)
+	}
+}
+
+// handleTiles renders just the wall, for the live update to swap in.
+func (s *Server) handleTiles(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+
+	if err := s.tmpl.ExecuteTemplate(w, "tiles", s.data()); err != nil {
+		s.log.Error("render tiles", "error", err)
+	}
+}
+
+// handleEvents streams a notification whenever a tile changes state.
+//
+// The event carries no payload. The client fetches /tiles instead, which keeps
+// one renderer rather than two and means a client that reconnects after
+// missing events gets current state rather than a replay it cannot apply.
+func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
+	if s.prober == nil {
+		http.Error(w, "no prober", http.StatusNotFound)
+		return
+	}
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Connection", "keep-alive")
+	// Buffering proxies will hold an event stream until the response ends,
+	// which for a stream is never. nginx honors this hint.
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
+
+	events, cancel := s.prober.Subscribe()
+	defer cancel()
+
+	// A heartbeat, so that an idle stream is not mistaken for a dead one by
+	// anything between here and the browser. A comment frame is valid SSE and
+	// the client ignores it.
+	heartbeat := time.NewTicker(25 * time.Second)
+	defer heartbeat.Stop()
+
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-heartbeat.C:
+			fmt.Fprint(w, ": keepalive\n\n")
+			flusher.Flush()
+		case _, open := <-events:
+			if !open {
+				return
+			}
+
+			fmt.Fprint(w, "event: tiles\ndata: 1\n\n")
+			flusher.Flush()
+		}
+	}
 }
 
 // handleSearch is the omnibox. Everything arrives here and leaves as a redirect.
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
-	d := s.rtr.Route(r.URL.Query().Get("q"))
+	s.mu.RLock()
+	rtr := s.rtr
+	s.mu.RUnlock()
+
+	d := rtr.Route(r.URL.Query().Get("q"))
 
 	if d.Kind == router.KindEmpty {
 		http.Redirect(w, r, "/", http.StatusSeeOther)

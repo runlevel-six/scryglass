@@ -14,6 +14,8 @@ import (
 
 	"github.com/runlevel-six/scryglass/internal/catalog"
 	"github.com/runlevel-six/scryglass/internal/config"
+	"github.com/runlevel-six/scryglass/internal/kube"
+	"github.com/runlevel-six/scryglass/internal/probe"
 	"github.com/runlevel-six/scryglass/internal/server"
 	"github.com/runlevel-six/scryglass/internal/version"
 )
@@ -50,10 +52,35 @@ func run() error {
 		return err
 	}
 
-	srv, err := server.New(cfg, cat, log)
+	prober := probe.New(probe.Options{
+		Interval: cfg.ProbeInterval,
+		Timeout:  cfg.ProbeTimeout,
+	})
+
+	srv, err := server.New(cfg, cat, prober, log)
 	if err != nil {
 		return err
 	}
+
+	// Without a cluster to discover from, the file is the whole catalog. That
+	// is M1's behavior and it stays reachable: running this outside
+	// Kubernetes should degrade to a working omnibox, not fail to start.
+	var discoverer *kube.Client
+
+	if cfg.Discovery {
+		discoverer, err = kube.InCluster()
+		if err != nil {
+			return fmt.Errorf("discovery is enabled but the cluster is unreachable: %w", err)
+		}
+	}
+
+	apply := func(discovered []catalog.Resource) {
+		merged := catalog.Merge(cat.Resources, discovered)
+		prober.SetResources(merged)
+		srv.SetResources(merged)
+	}
+
+	apply(nil)
 
 	log.Info("starting",
 		"version", version.Version,
@@ -61,6 +88,7 @@ func run() error {
 		"base_url", cfg.BaseURL,
 		"resources", len(cat.Resources),
 		"bangs", len(cat.Bangs),
+		"discovery", cfg.Discovery,
 	)
 
 	httpSrv := &http.Server{
@@ -75,6 +103,12 @@ func run() error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	go prober.Run(ctx)
+
+	if discoverer != nil {
+		go runDiscovery(ctx, discoverer, cfg, log, apply)
+	}
 
 	errc := make(chan error, 1)
 
@@ -99,4 +133,50 @@ func run() error {
 	defer cancel()
 
 	return httpSrv.Shutdown(shutdownCtx)
+}
+
+// runDiscovery refreshes the resource list from the cluster on an interval.
+//
+// A failed pass logs and keeps the previous list rather than emptying the
+// wall. An API blip should not blank the dashboard, and a dashboard that
+// blanks itself is one nobody trusts afterwards.
+func runDiscovery(
+	ctx context.Context,
+	client *kube.Client,
+	cfg *config.Config,
+	log *slog.Logger,
+	apply func([]catalog.Resource),
+) {
+	opt := kube.Options{
+		AnnotationPrefix: cfg.AnnotationPrefix,
+		SelfHost:         cfg.SelfHost(),
+	}
+
+	refresh := func() {
+		discovered, err := client.Discover(ctx, opt)
+		if err != nil {
+			if ctx.Err() == nil {
+				log.Warn("discovery failed; keeping the previous resources", "error", err)
+			}
+
+			return
+		}
+
+		log.Debug("discovered", "count", len(discovered))
+		apply(discovered)
+	}
+
+	refresh()
+
+	ticker := time.NewTicker(cfg.DiscoveryInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			refresh()
+		}
+	}
 }

@@ -21,6 +21,7 @@ spec:
       # Kubernetes generates — but adding a setting called PORT would be a
       # very confusing afternoon. Turning the links off costs nothing.
       enableServiceLinks: false
+      serviceAccountName: scryglass
       securityContext:
         # An explicit UID, not just runAsNonRoot: the kubelet has to be able to
         # verify the user is non-root before it will start the container, and
@@ -45,6 +46,19 @@ spec:
             # and the OpenSearch descriptor has to name an absolute URL.
             - name: SCRYGLASS_BASE_URL
               value: REPLACE-https://home.example.com
+
+            # Reads Ingress objects to build the tile wall. Off by default in
+            # the binary so it runs anywhere; on here, because in a cluster the
+            # cluster is the better source than a hand-kept list. That
+            # staleness is what killed the dashboard this replaces.
+            - name: SCRYGLASS_DISCOVERY
+              value: 'true'
+
+            # The annotation namespace read for per-Ingress overrides — name,
+            # group, icon, probe path, retired, hide. Change it and change the
+            # annotations on your Ingresses to match.
+            - name: SCRYGLASS_ANNOTATION_PREFIX
+              value: scryglass.local
           securityContext:
             allowPrivilegeEscalation: false
             # Safe here, and checked rather than assumed: this binary writes

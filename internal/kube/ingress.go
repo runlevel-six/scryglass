@@ -220,7 +220,7 @@ func firstNonEmpty(vals ...string) string {
 }
 
 // titleize turns an object name into something worth showing on a tile:
-// "rook-ceph-dashboard" becomes "Rook Ceph Dashboard".
+// "media-server-web" becomes "Media Server Web".
 func titleize(name string) string {
 	parts := strings.FieldsFunc(name, func(r rune) bool { return r == '-' || r == '_' })
 	for i, p := range parts {
