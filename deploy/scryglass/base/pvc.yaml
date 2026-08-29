@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: scryglass
+  labels:
+    app.kubernetes.io/name: scryglass
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  # storageClassName is deliberately unset so a cluster with a default class
+  # works out of the box. Name it in your overlay. It must be a block-mode
+  # class, not a network filesystem: bookmarks are in SQLite, whose locking is
+  # unreliable over NFS-alikes.

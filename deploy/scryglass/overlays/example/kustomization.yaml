@@ -18,6 +18,16 @@ configMapGenerator:
       - catalog.yaml
 
 patches:
+  # Naming the class here means a change to the cluster default cannot silently
+  # move the bookmarks onto different storage. It must be block mode.
+  - target:
+      kind: PersistentVolumeClaim
+      name: scryglass
+    patch: |
+      - op: add
+        path: /spec/storageClassName
+        value: REPLACE-block-storage-class
+
   - target:
       kind: Ingress
       name: scryglass

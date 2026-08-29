@@ -64,6 +64,14 @@ type Config struct {
 	// prober keeps a bounded number of samples, so a very short probe interval
 	// paired with a long window here will never fill.
 	BarWindow time.Duration
+
+	// DatabasePath is where bookmarks are stored.
+	//
+	// Empty disables bookmarks entirely, and that is a supported way to run
+	// this rather than a degraded one: it keeps the binary usable outside a
+	// cluster and with no volume attached, which is what every earlier
+	// milestone assumed.
+	DatabasePath string
 }
 
 // SelfHost is the host part of BaseURL.
@@ -93,6 +101,7 @@ func Load() (*Config, error) {
 
 		Discovery:        isTrue(os.Getenv(Prefix + "DISCOVERY")),
 		AnnotationPrefix: strings.TrimSuffix(envOr("ANNOTATION_PREFIX", "scryglass.local"), "/"),
+		DatabasePath:     os.Getenv(Prefix + "DATABASE"),
 	}
 
 	var durProblems []string

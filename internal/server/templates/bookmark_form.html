@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{if .Form.ID}}Edit{{else}}Save{{end}} bookmark &middot; {{.Title}}</title>
+<style>{{.CSS}}</style>
+</head>
+<body class="page">
+<main class="narrow">
+  <form action="/bookmarks" method="post" class="stack">
+    <input type="hidden" name="popup" value="1">
+
+    <label>Address
+      <input type="url" name="url" value="{{.Form.URL}}" required
+             {{if .Form.URL}}readonly{{else}}autofocus{{end}}>
+    </label>
+
+    <label>Title
+      <input type="text" name="title" value="{{.Form.Title}}" {{if .Form.URL}}autofocus{{end}}>
+    </label>
+
+    <label>Tags <span class="hint">comma or space separated</span>
+      <input type="text" name="tags" value="{{range $i, $t := .Form.Tags}}{{if $i}}, {{end}}{{$t}}{{end}}"
+             autocomplete="off" spellcheck="false">
+    </label>
+
+    <label>Notes
+      <textarea name="notes" rows="3">{{.Form.Notes}}</textarea>
+    </label>
+
+    <div class="actions">
+      <button type="submit">Save</button>
+      <button type="button" onclick="window.close()">Cancel</button>
+    </div>
+  </form>
+</main>
+</body>
+</html>

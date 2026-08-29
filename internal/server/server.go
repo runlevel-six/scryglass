@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/runlevel-six/scryglass/internal/bookmarks"
 	"github.com/runlevel-six/scryglass/internal/catalog"
 	"github.com/runlevel-six/scryglass/internal/config"
 	"github.com/runlevel-six/scryglass/internal/probe"
@@ -32,6 +33,7 @@ type Server struct {
 	log    *slog.Logger
 	tmpl   *template.Template
 	prober *probe.Prober
+	marks  *bookmarks.Store
 	now    func() time.Time
 
 	css template.CSS
@@ -50,9 +52,16 @@ type Server struct {
 //
 // The prober may be nil, in which case no tiles are rendered and no events are
 // pushed — which is exactly M1's behavior, and worth keeping reachable.
-func New(cfg *config.Config, cat *catalog.Catalog, prober *probe.Prober, log *slog.Logger) (*Server, error) {
+func New(
+	cfg *config.Config,
+	cat *catalog.Catalog,
+	prober *probe.Prober,
+	marks *bookmarks.Store,
+	log *slog.Logger,
+) (*Server, error) {
 	tmpl, err := template.ParseFS(templatesFS,
-		"templates/index.html", "templates/tiles.html", "templates/opensearch.xml")
+		"templates/index.html", "templates/tiles.html", "templates/opensearch.xml",
+		"templates/bookmarks.html", "templates/bookmark_form.html")
 	if err != nil {
 		return nil, fmt.Errorf("parse templates: %w", err)
 	}
@@ -72,15 +81,17 @@ func New(cfg *config.Config, cat *catalog.Catalog, prober *probe.Prober, log *sl
 		log:    log,
 		tmpl:   tmpl,
 		prober: prober,
+		marks:  marks,
 		now:    time.Now,
 		// Both are ours, embedded at build time and never derived from a
 		// request; without these conversions they would be escaped into
 		// unusable text inside their elements.
 		css: template.CSS(css), //nolint:gosec // G203: embedded asset, not user input
 		js:  template.JS(js),   //nolint:gosec // G203: embedded asset, not user input
-		cat: cat,
-		rtr: router.New(cat),
+		cat: withBookmarkBang(cat, cfg, marks != nil),
 	}
+
+	s.rtr = router.New(s.cat)
 
 	var descriptor strings.Builder
 
@@ -121,6 +132,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /search", s.handleSearch)
 	mux.HandleFunc("GET /tiles", s.handleTiles)
 	mux.HandleFunc("GET /events", s.handleEvents)
+	mux.HandleFunc("GET /bookmarks", s.handleBookmarks)
+	mux.HandleFunc("GET /bookmarks/new", s.handleBookmarkForm)
+	mux.HandleFunc("POST /bookmarks", s.handleBookmarkSave)
+	mux.HandleFunc("POST /bookmarks/{id}/delete", s.handleBookmarkDelete)
 	mux.HandleFunc("GET /opensearch.xml", s.handleDescriptor)
 	mux.HandleFunc("GET /healthz", s.handleHealth)
 	mux.HandleFunc("GET /readyz", s.handleHealth)

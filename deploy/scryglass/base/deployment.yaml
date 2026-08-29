@@ -6,6 +6,12 @@ metadata:
     app.kubernetes.io/name: scryglass
 spec:
   replicas: 1
+  # The PVC is ReadWriteOnce and SQLite wants one writer, so the old pod must
+  # be gone before the new one starts. RollingUpdate would deadlock on the
+  # volume: the new pod cannot mount it until the old one releases it, and the
+  # old one is not terminated until the new one is ready.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: scryglass
@@ -29,6 +35,11 @@ spec:
         runAsNonRoot: true
         runAsUser: 65532   # distroless "nonroot"
         runAsGroup: 65532
+        # Required now that there is a volume: without it the PVC lands owned
+        # by root and the process cannot create its database. Learned on this
+        # cluster's Authelia deployment rather than from a document.
+        fsGroup: 65532
+        fsGroupChangePolicy: 'OnRootMismatch'
         seccompProfile:
           type: RuntimeDefault
       containers:
@@ -65,11 +76,16 @@ spec:
             # a wall that looks broken for longer after every deploy.
             - name: SCRYGLASS_BAR_WINDOW
               value: 30m
+
+            # Where bookmarks live. Unset disables them entirely, which is a
+            # supported way to run this rather than a degraded one — it is what
+            # every milestone before this one did.
+            - name: SCRYGLASS_DATABASE
+              value: /var/lib/scryglass/bookmarks.db
           securityContext:
             allowPrivilegeEscalation: false
-            # Safe here, and checked rather than assumed: this binary writes
-            # nothing to disk. It reads the catalog at startup and serves from
-            # memory. There is no state, which is also why there is no volume.
+            # Still safe: everything this writes goes to the mounted volume
+            # below, and nothing is written to the image's own filesystem.
             readOnlyRootFilesystem: true
             capabilities:
               drop: ['ALL']
@@ -80,6 +96,8 @@ spec:
             - name: catalog
               mountPath: /etc/scryglass
               readOnly: true
+            - name: data
+              mountPath: /var/lib/scryglass
           livenessProbe:
             httpGet:
               path: /healthz
@@ -102,3 +120,6 @@ spec:
         - name: catalog
           configMap:
             name: scryglass-catalog
+        - name: data
+          persistentVolumeClaim:
+            claimName: scryglass

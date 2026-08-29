@@ -31,7 +31,7 @@ func newTestServer(t *testing.T) http.Handler {
 
 	cfg := &config.Config{Addr: ":0", BaseURL: "https://home.example", Title: "Scryglass"}
 
-	s, err := server.New(cfg, cat, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	s, err := server.New(cfg, cat, nil, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
 		t.Fatal(err)
 	}

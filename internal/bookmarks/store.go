@@ -245,6 +245,30 @@ func (s *Store) Get(ctx context.Context, id int64) (Bookmark, error) {
 	return out[0], nil
 }
 
+// FindByURL returns the bookmark with this URL, if there is one.
+//
+// Used by the add page so that re-adding a page you already saved edits the
+// existing entry rather than presenting an empty form whose save would discard
+// the notes and tags already on it.
+func (s *Store) FindByURL(ctx context.Context, rawURL string) (Bookmark, error) {
+	rows, err := s.db.QueryContext(ctx, selectBookmarks+" WHERE b.url = ? GROUP BY b.id", strings.TrimSpace(rawURL))
+	if err != nil {
+		return Bookmark{}, err
+	}
+	defer rows.Close()
+
+	out, err := scanBookmarks(rows)
+	if err != nil {
+		return Bookmark{}, err
+	}
+
+	if len(out) == 0 {
+		return Bookmark{}, ErrNotFound
+	}
+
+	return out[0], nil
+}
+
 // selectBookmarks is the shared projection. Tags arrive as a single delimited
 // string rather than a second query per row, because the alternative is one
 // round trip per bookmark and this is read on every page.

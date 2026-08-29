@@ -25,3 +25,10 @@ coverage.out
 # Local environment
 .env
 .env.local
+
+# Design source material. Concept sheets and mockups are large, are worked on
+# outside this tree, and the published repository needs the exported assets
+# rather than the sheets they came from.
+/scryglass-concept-sheet.png
+*-concept-sheet.png
+/design/

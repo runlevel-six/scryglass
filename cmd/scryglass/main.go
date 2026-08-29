@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/runlevel-six/scryglass/internal/bookmarks"
 	"github.com/runlevel-six/scryglass/internal/catalog"
 	"github.com/runlevel-six/scryglass/internal/config"
 	"github.com/runlevel-six/scryglass/internal/kube"
@@ -58,7 +59,20 @@ func run() error {
 		Logger:   log,
 	})
 
-	srv, err := server.New(cfg, cat, prober, log)
+	// Bookmarks are optional: with no database path configured the binary is
+	// exactly what it was before M3, which keeps it runnable outside a cluster
+	// and with no volume attached.
+	var marks *bookmarks.Store
+
+	if cfg.DatabasePath != "" {
+		if marks, err = bookmarks.Open(cfg.DatabasePath); err != nil {
+			return err
+		}
+
+		defer marks.Close()
+	}
+
+	srv, err := server.New(cfg, cat, prober, marks, log)
 	if err != nil {
 		return err
 	}
@@ -90,6 +104,7 @@ func run() error {
 		"resources", len(cat.Resources),
 		"bangs", len(cat.Bangs),
 		"discovery", cfg.Discovery,
+		"bookmarks", cfg.DatabasePath != "",
 	)
 
 	httpSrv := &http.Server{

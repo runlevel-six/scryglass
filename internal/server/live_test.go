@@ -27,7 +27,7 @@ func newLiveServer(t *testing.T, p *probe.Prober) http.Handler {
 
 	cfg := &config.Config{BaseURL: "https://home.example", Title: "Scryglass"}
 
-	s, err := server.New(cfg, cat, p, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	s, err := server.New(cfg, cat, p, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
 		t.Fatal(err)
 	}

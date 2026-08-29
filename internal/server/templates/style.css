@@ -75,3 +75,74 @@ input[type=search]:focus { outline: 2px solid #6b8afd; outline-offset: 1px; }
 .seg-up   { background: #2f9e5f; }
 .seg-down { background: #d1443c; }
 .seg-none { background: var(--line); }
+
+/* ---- bookmarks ---------------------------------------------------------- */
+body.page { display: block; place-items: initial; }
+main.wide, main.narrow {
+  width: min(52rem, 92vw); margin: 2.5rem auto; padding-bottom: 3rem;
+}
+main.narrow { width: min(30rem, 92vw); margin-top: 1.5rem; }
+.crumbs { margin-bottom: 1rem; font-size: 0.85rem; }
+.crumbs a { color: var(--muted); text-decoration: none; }
+.crumbs a:hover { color: var(--fg); }
+
+.tagbar {
+  list-style: none; display: flex; flex-wrap: wrap; gap: 0.35rem;
+  margin: 0.9rem 0 0; padding: 0; font-size: 0.8rem;
+}
+.tagbar a {
+  display: inline-flex; gap: 0.35rem; align-items: baseline;
+  padding: 0.2rem 0.55rem; border-radius: 999px;
+  border: 1px solid var(--line); color: var(--muted); text-decoration: none;
+}
+.tagbar .on a, .tagbar a:hover { color: var(--fg); border-color: var(--muted); }
+.tagbar span { color: var(--muted); font-size: 0.7rem; }
+
+.marks { list-style: none; margin: 1.4rem 0 0; padding: 0; }
+.marks li {
+  display: flex; align-items: flex-start; gap: 1rem;
+  padding: 0.7rem 0; border-bottom: 1px solid var(--line);
+}
+.mark { flex: 1; min-width: 0; text-decoration: none; color: var(--fg); display: block; }
+.mark-title { display: block; font-size: 0.95rem; }
+.mark-url {
+  display: block; font-size: 0.75rem; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.mark-notes { display: block; font-size: 0.8rem; color: var(--muted); margin-top: 0.2rem; }
+.mark:hover .mark-title { text-decoration: underline; }
+.mark-meta { display: flex; align-items: center; gap: 0.4rem; flex: none; }
+.mark-meta form { display: inline; }
+.tag, .edit {
+  font-size: 0.72rem; color: var(--muted); text-decoration: none;
+  padding: 0.1rem 0.4rem; border: 1px solid var(--line); border-radius: 999px;
+}
+.tag:hover, .edit:hover { color: var(--fg); border-color: var(--muted); }
+.del {
+  background: none; border: 0; color: var(--muted); cursor: pointer;
+  font-size: 1rem; line-height: 1; padding: 0 0.2rem;
+}
+.del:hover { color: #d1443c; }
+.empty { color: var(--muted); margin-top: 2rem; }
+
+.howto { margin-top: 2.5rem; font-size: 0.85rem; color: var(--muted); }
+.howto summary { cursor: pointer; }
+.bookmarklet {
+  display: inline-block; padding: 0.35rem 0.8rem; border-radius: 6px;
+  border: 1px dashed var(--muted); color: var(--fg); text-decoration: none;
+}
+.hint { font-size: 0.75rem; color: var(--muted); font-weight: normal; }
+
+.stack { display: flex; flex-direction: column; gap: 0.9rem; }
+.stack label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.8rem; color: var(--muted); }
+.stack input, .stack textarea {
+  font: inherit; font-size: 0.95rem; color: var(--fg); background: var(--field);
+  border: 1px solid var(--line); border-radius: 8px; padding: 0.55rem 0.7rem;
+}
+.stack input:read-only { color: var(--muted); }
+.actions { display: flex; gap: 0.5rem; }
+.actions button {
+  font: inherit; padding: 0.5rem 1.1rem; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--field); color: var(--fg);
+}
+.actions button[type=submit] { background: #2f6ea8; border-color: #2f6ea8; color: #fff; }
