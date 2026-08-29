@@ -1,0 +1,42 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# A worked example. Copy it to deploy/scryglass/overlays/local — gitignored —
+# then put your real hosts in catalog.yaml and the patches below.
+
+namespace: scryglass
+
+resources:
+  - ../../base
+
+# Replaces the base catalog wholesale. Patching a list by index is how an entry
+# ends up applying to the wrong thing after somebody inserts a line above it.
+configMapGenerator:
+  - name: scryglass-catalog
+    behavior: replace
+    files:
+      - catalog.yaml
+
+patches:
+  - target:
+      kind: Ingress
+      name: scryglass
+    patch: |
+      - op: replace
+        path: /spec/rules/0/host
+        value: home.example.com
+      - op: replace
+        path: /metadata/annotations/nginx.ingress.kubernetes.io~1auth-signin
+        value: https://auth.example.com?rm=$request_method
+
+  - target:
+      kind: Deployment
+      name: scryglass
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/env/2/value
+        value: https://home.example.com
+
+images:
+  - name: ghcr.io/runlevel-six/scryglass
+    newTag: v0.1.0

@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}}</title>
+<link rel="search" type="application/opensearchdescription+xml" title="{{.Title}}" href="/opensearch.xml">
+<style>{{.CSS}}</style>
+</head>
+<body>
+<main>
+  <form action="/search" method="get" role="search">
+    <input type="search" name="q" autofocus autocomplete="off" autocapitalize="off"
+           spellcheck="false" aria-label="Search or jump to" placeholder="Search, or type a name&hellip;">
+  </form>
+  {{if .Bangs}}
+  <ul class="bangs">
+    {{range .Bangs}}<li><b>!{{.Key}}</b> {{.Name}}</li>{{end}}
+    <li class="fallback">anything else &rarr; {{.SearchName}}</li>
+  </ul>
+  {{end}}
+</main>
+</body>
+</html>

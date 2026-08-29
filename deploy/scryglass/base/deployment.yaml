@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scryglass
+  labels:
+    app.kubernetes.io/name: scryglass
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: scryglass
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: scryglass
+    spec:
+      # Kubernetes injects SCRYGLASS_SERVICE_HOST, SCRYGLASS_PORT and friends
+      # for every Service in the namespace, and this binary reads its
+      # configuration from SCRYGLASS_-prefixed variables. Nothing collides
+      # today — it reads ADDR, CATALOG, BASE_URL and TITLE, none of which
+      # Kubernetes generates — but adding a setting called PORT would be a
+      # very confusing afternoon. Turning the links off costs nothing.
+      enableServiceLinks: false
+      securityContext:
+        # An explicit UID, not just runAsNonRoot: the kubelet has to be able to
+        # verify the user is non-root before it will start the container, and
+        # cannot do that from the image alone.
+        runAsNonRoot: true
+        runAsUser: 65532   # distroless "nonroot"
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: scryglass
+          image: ghcr.io/runlevel-six/scryglass:v0.1.0
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: SCRYGLASS_ADDR
+              value: ':8080'
+            - name: SCRYGLASS_CATALOG
+              value: /etc/scryglass/catalog.yaml
+            # No default: the process cannot discover what it is reachable as,
+            # and the OpenSearch descriptor has to name an absolute URL.
+            - name: SCRYGLASS_BASE_URL
+              value: REPLACE-https://home.example.com
+          securityContext:
+            allowPrivilegeEscalation: false
+            # Safe here, and checked rather than assumed: this binary writes
+            # nothing to disk. It reads the catalog at startup and serves from
+            # memory. There is no state, which is also why there is no volume.
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ['ALL']
+          volumeMounts:
+            # A directory, not a subPath. A subPath mount is resolved once at
+            # container start and never updated — which matters the moment
+            # anything here starts re-reading its configuration.
+            - name: catalog
+              mountPath: /etc/scryglass
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 1
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 10m
+              memory: 24Mi
+            limits:
+              memory: 96Mi
+      volumes:
+        - name: catalog
+          configMap:
+            name: scryglass-catalog

@@ -1,0 +1,30 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# The namespace is not created here, so that `kubectl delete -k` cannot take it
+# and everything else in it. Create it once, by hand.
+namespace: scryglass
+
+resources:
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/part-of: scryglass
+      app.kubernetes.io/managed-by: kustomize
+
+images:
+  - name: ghcr.io/runlevel-six/scryglass
+    newTag: v0.1.0
+
+# The catalog ships as a generated ConfigMap so that editing it produces a new
+# name, which rolls the Deployment. The binary reads the file once at startup
+# and never again — an apply that changed no spec would leave the old catalog
+# serving, which is the "apply, then restart by hand" trap.
+configMapGenerator:
+  - name: scryglass-catalog
+    files:
+      - catalog.yaml=catalog.example.yaml

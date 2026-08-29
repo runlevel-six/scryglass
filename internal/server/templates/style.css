@@ -1,0 +1,31 @@
+/* Inlined into the page rather than served as a file, deliberately.
+   This is a new-tab page: a second request for a stylesheet is a second
+   round trip before anything is painted, and the whole budget is one. */
+:root {
+  color-scheme: light dark;
+  --bg: #fbfbfa; --fg: #1b1b1a; --muted: #6b6b66; --line: #dcdcd6; --field: #fff;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #16171a; --fg: #e8e8e4; --muted: #8b8b85; --line: #2c2e33; --field: #1e2025; }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; min-height: 100vh; display: grid; place-items: center;
+  background: var(--bg); color: var(--fg);
+  font: 16px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+main { width: min(42rem, 90vw); margin-top: -8vh; }
+input[type=search] {
+  width: 100%; padding: 0.9rem 1.1rem; font-size: 1.15rem;
+  color: var(--fg); background: var(--field);
+  border: 1px solid var(--line); border-radius: 10px;
+  -webkit-appearance: none; appearance: none;
+}
+input[type=search]:focus { outline: 2px solid #6b8afd; outline-offset: 1px; }
+.bangs {
+  list-style: none; margin: 1.1rem 0 0; padding: 0;
+  display: flex; flex-wrap: wrap; gap: 0.4rem 1.1rem;
+  font-size: 0.85rem; color: var(--muted);
+}
+.bangs b { color: var(--fg); font-weight: 600; }
+.bangs .fallback { font-style: italic; }

@@ -1,0 +1,50 @@
+# golangci-lint v2 configuration.
+#
+# The set is deliberately modest, and matches the one in this project's
+# siblings. A linter that fires constantly on style preferences gets disabled
+# wholesale within a month; one that only fires on real defects keeps getting
+# run. Everything enabled here catches a class of bug, not a class of taste.
+version: "2"
+
+linters:
+  # errcheck, govet, ineffassign, staticcheck, and unused are on by default.
+  enable:
+    - bodyclose      # unclosed response bodies leak connections
+    - contextcheck   # dropped contexts break cancellation and shutdown
+    - errorlint      # %v on errors and == comparisons break errors.Is/As
+    - gosec          # this serves the open internet
+    - misspell       # US locale: see the setting below
+    - nilerr         # `if err != nil { return nil }` — silent failure
+    - noctx          # requests without a context cannot be canceled
+    - revive         # replaces the deprecated golint
+    - unconvert      # unnecessary conversions
+    - wastedassign
+
+  settings:
+    misspell:
+      locale: US
+    gosec:
+      excludes:
+        # G104 duplicates errcheck.
+        - G104
+    revive:
+      rules:
+        - name: exported
+          disabled: true  # doc comments are reviewed by humans, not enforced
+
+  exclusions:
+    presets:
+      - comments
+      - std-error-handling
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+          - gosec
+
+formatters:
+  enable:
+    - gofmt
+  settings:
+    gofmt:
+      simplify: true

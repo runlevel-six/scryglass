@@ -1,0 +1,8 @@
+# The build injects version identity via -ldflags, so .git is not needed and
+# its absence is what -buildvcs=false accounts for.
+.git
+.github
+deploy
+docs
+*.md
+catalog*.yaml

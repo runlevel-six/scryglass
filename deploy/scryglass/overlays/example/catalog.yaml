@@ -1,0 +1,49 @@
+# Scryglass catalog — a worked example.
+#
+# Copy this, point SCRYGLASS_CATALOG at your copy, and put your own hosts in
+# it. The real one is deployed from a ConfigMap and is not committed here: a
+# host list is a map of somebody's network.
+#
+# In M1 every resource is listed by hand. From M2 the app tiles are discovered
+# from Ingress objects instead and this file keeps only what the cluster
+# cannot tell us — external bookmarks, and anything not running here.
+
+# Where a query goes when nothing else claims it. Required.
+search:
+  name: Web
+  url: "https://search.example.com/search?q={query}"
+
+# Prefixes that route somewhere specific. Type `!t wal archiving` — or
+# `wal archiving !t`, both ends work.
+#
+# These are plain redirects, deliberately. The target already knows how to
+# search itself and already knows who you are, so there is nothing to
+# integrate: a bang works the day you add it.
+bangs:
+  - key: t
+    name: Archive
+    url: "https://archive.example.com/search?q={query}"
+
+  - key: w
+    name: Wishlist
+    url: "https://wishlist.example.com/?q={query}"
+
+# Things to jump to. Typing a name — or a unique prefix of one — goes straight
+# there instead of searching.
+#
+# Ambiguity is not resolved by guessing: if two resources match equally well
+# the query falls through to search, because a confident jump to the wrong
+# application looks deliberate.
+resources:
+  - name: Photos
+    url: https://photos.example.com
+    group: media
+    aliases: [gallery, pics]
+
+  - name: Media
+    url: https://media.example.com
+    group: media
+
+  - name: Notes
+    url: https://notes.example.com
+    group: personal
