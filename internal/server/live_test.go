@@ -180,3 +180,22 @@ func TestEventStreamSyncsOnConnect(t *testing.T) {
 
 	t.Fatal("no event on connect; a late client would never learn the current state")
 }
+
+// Tiles open in a new tab. This page is the browser's new-tab page, so
+// navigating away consumes the thing you opened to get here — and rel=noopener
+// keeps the opened page from reaching back through window.opener.
+func TestTilesOpenInANewTab(t *testing.T) {
+	p := probe.New(probe.Options{})
+	p.SetResources([]catalog.Resource{{Name: "Photos", URL: "https://photos.example"}})
+
+	rec := httptest.NewRecorder()
+	newLiveServer(t, p).ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/tiles", nil))
+
+	body := rec.Body.String()
+
+	for _, want := range []string{`target="_blank"`, `rel="noopener"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("tile link is missing %s\n%s", want, body)
+		}
+	}
+}

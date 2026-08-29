@@ -6,7 +6,12 @@
   <ul class="tiles">
     {{range .Tiles}}
     <li class="tile state-{{.State}}">
-      <a href="{{.URL}}" {{if .Title}}title="{{.Title}}"{{end}}>
+      {{/* New tab, deliberately. This page is the browser's new-tab page, so
+           navigating away from it consumes the thing you opened to get here —
+           and the wall is somewhere you come back to rather than pass through.
+           rel=noopener keeps the opened page from reaching back through
+           window.opener; there is no reason for a tile to grant that. */}}
+      <a href="{{.URL}}" target="_blank" rel="noopener" {{if .Title}}title="{{.Title}}"{{end}}>
         <span class="head">
           <span class="dot" aria-hidden="true"></span>
           <span class="name">{{.Name}}</span>
