@@ -9,7 +9,7 @@
 <body class="page">
 <main class="narrow">
   <form action="/bookmarks" method="post" class="stack">
-    <input type="hidden" name="popup" value="1">
+    {{if .Popup}}<input type="hidden" name="popup" value="1">{{end}}
 
     <label>Address
       <input type="url" name="url" value="{{.Form.URL}}" required
@@ -31,7 +31,8 @@
 
     <div class="actions">
       <button type="submit">Save</button>
-      <button type="button" onclick="window.close()">Cancel</button>
+      {{if .Popup}}<button type="button" onclick="window.close()">Cancel</button>
+      {{else}}<a class="cancel" href="/bookmarks">Cancel</a>{{end}}
     </div>
   </form>
 </main>

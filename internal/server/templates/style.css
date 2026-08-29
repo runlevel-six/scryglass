@@ -146,3 +146,14 @@ main.narrow { width: min(30rem, 92vw); margin-top: 1.5rem; }
   border: 1px solid var(--line); background: var(--field); color: var(--fg);
 }
 .actions button[type=submit] { background: #2f6ea8; border-color: #2f6ea8; color: #fff; }
+.copyable {
+  width: 100%; font: inherit; font-size: 0.7rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--muted); background: var(--field);
+  border: 1px solid var(--line); border-radius: 6px; padding: 0.4rem 0.55rem;
+}
+.cancel {
+  display: inline-flex; align-items: center; padding: 0.5rem 1.1rem;
+  border-radius: 8px; border: 1px solid var(--line);
+  color: var(--fg); text-decoration: none;
+}

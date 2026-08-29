@@ -171,11 +171,12 @@ func TestBookmarksAbsentWithoutAStore(t *testing.T) {
 	}
 }
 
-// html/template refuses a javascript: href and substitutes #ZgotmplZ, which is
-// right for anything derived from a request and wrong for this one. The
-// failure is silent — the page renders, the link simply does nothing — so it
-// gets a test.
-func TestBookmarkletRendersAsJavascriptURL(t *testing.T) {
+// The bookmarklet is a real href in the served HTML, not something script
+// assigns. html/template has two unhelpful behaviors for a javascript: URL —
+// replacing it with #ZgotmplZ, or percent-encoding the whole body — and a link
+// meant to be DRAGGED must not depend on script having run. Every one of these
+// failures renders a page that looks correct and drags nothing.
+func TestBookmarkletIsARealHref(t *testing.T) {
 	h, _ := newBookmarkServer(t)
 
 	rec := httptest.NewRecorder()
@@ -184,26 +185,59 @@ func TestBookmarkletRendersAsJavascriptURL(t *testing.T) {
 	body := rec.Body.String()
 
 	if strings.Contains(body, "ZgotmplZ") {
-		t.Fatal("the bookmarklet href was filtered out by html/template")
+		t.Fatal("the href was filtered out by html/template")
 	}
 
-	if !strings.Contains(body, `id="bookmarklet"`) {
-		t.Error("no bookmarklet link in the page")
+	if !strings.Contains(body, `href="javascript:(function()`) {
+		t.Fatalf("no literal javascript: href in the page")
 	}
 
-	if !strings.Contains(body, "javascript:(function()") {
-		t.Error("the script does not build a javascript: URL")
+	if strings.Contains(body, "%28function") {
+		t.Error("the href was percent-encoded")
 	}
 
-	// And it must carry the configured external address, not a relative path:
-	// this runs on somebody else's page, where a relative URL means their
-	// site. Base and path are concatenated at runtime, so both halves are
-	// checked rather than the joined string.
-	if !strings.Contains(body, `"https://home.example"`) {
-		t.Error("the bookmarklet does not carry the absolute base URL")
+	// It must carry the configured external address: this runs on somebody
+	// else's page, where a relative URL means their site.
+	if !strings.Contains(body, "https://home.example/bookmarks/new") {
+		t.Error("the bookmarklet does not use the absolute base URL")
 	}
 
-	if !strings.Contains(body, "/bookmarks/new?url=") {
-		t.Error("the bookmarklet does not target the add page")
+	// And it must ask for the popup flow, or saving leaves a window that
+	// cannot close itself.
+	if !strings.Contains(body, "popup=1") {
+		t.Error("the bookmarklet does not request the popup flow")
+	}
+}
+
+// Opened by hand rather than by the bookmarklet, the form must not claim to be
+// a popup: window.close() does nothing to a tab the script did not open, so
+// saving would leave a bare "Saved." page and no way back.
+func TestManualAddIsNotAPopup(t *testing.T) {
+	h, _ := newBookmarkServer(t)
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/bookmarks/new", nil))
+
+	if strings.Contains(rec.Body.String(), `name="popup"`) {
+		t.Error("a hand-opened form declares itself a popup")
+	}
+
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/bookmarks/new?popup=1", nil))
+
+	if !strings.Contains(rec.Body.String(), `name="popup"`) {
+		t.Error("a form opened as a popup does not declare it")
+	}
+}
+
+// And a save without the popup flag goes back to the list rather than to a
+// page whose only content is the word Saved.
+func TestManualSaveRedirectsToTheList(t *testing.T) {
+	h, _ := newBookmarkServer(t)
+
+	rec := post(t, h, "/bookmarks", url.Values{"url": {"https://example.com/a"}, "title": {"A"}})
+
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/bookmarks" {
+		t.Fatalf("status = %d, Location = %q; want 303 to /bookmarks", rec.Code, rec.Header().Get("Location"))
 	}
 }

@@ -51,23 +51,15 @@
   <details class="howto">
     <summary>Add bookmarks</summary>
     <p>Drag this to your bookmarks bar, then click it on any page you want to keep:</p>
-    <p><a class="bookmarklet" id="bookmarklet" href="#">Save to {{.Title}}</a></p>
+    <p><a class="bookmarklet" {{.BookmarkletHref}}>Save to {{.Title}}</a></p>
     <p class="hint">It opens a small window rather than saving in the background, so that an
     expired session can sign you back in instead of failing silently.</p>
+    <p class="hint">If your browser refuses to bookmark a dragged link, copy this instead and
+    paste it as the address of a new bookmark:</p>
+    <p><input class="copyable" type="text" readonly value="{{.BookmarkletText}}"
+              onclick="this.select()" aria-label="Bookmarklet address"></p>
     <p><a href="/bookmarks/new">Or add one by hand</a>.</p>
   </details>
 </main>
-<script>
-// Assigned here rather than rendered into the href: html/template refuses a
-// javascript: URL, and typing it around that only percent-encodes the body.
-(function () {
-  var a = document.getElementById("bookmarklet");
-  if (!a) return;
-  var base = {{.BaseURL}};
-  a.href = "javascript:(function(){window.open(" + JSON.stringify(base + "/bookmarks/new?url=") +
-    "+encodeURIComponent(location.href)+" + JSON.stringify("&title=") +
-    "+encodeURIComponent(document.title),'scryglass','width=560,height=460');})();";
-})();
-</script>
 </body>
 </html>

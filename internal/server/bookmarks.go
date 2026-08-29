@@ -2,6 +2,7 @@ package server
 
 import (
 	"errors"
+	"html"
 	"html/template"
 	"net/http"
 	"strconv"
@@ -24,15 +25,26 @@ type bookmarkData struct {
 	// Form is the bookmark being added or edited, on the add page.
 	Form bookmarks.Bookmark
 
-	// BaseURL is the external address, used to build the bookmarklet.
+	// Popup is true when the add page was opened by the bookmarklet, and so
+	// should close itself rather than redirect.
+	Popup bool
+
+	// BookmarkletHref is the complete href attribute for the bookmarklet.
 	//
-	// The bookmarklet's href is assigned by script rather than rendered into
-	// the template, and that is not a workaround for the escaper being wrong.
-	// html/template refuses a javascript: href outright, and typing it as
-	// template.URL only downgrades that to percent-encoding the whole body —
-	// which browsers mostly decode and are increasingly willing not to.
-	// Assigning .href from script produces the literal string every time.
-	BaseURL string
+	// A whole attribute, not a URL, because html/template has two unhelpful
+	// behaviors for this one link and only this escapes both: a plain string
+	// href beginning javascript: is replaced with #ZgotmplZ, and typing it as
+	// template.URL percent-encodes the entire body instead. Emitting the
+	// attribute verbatim renders the literal string.
+	//
+	// An earlier version assigned this from script. That worked, but a link
+	// you are meant to DRAG should not depend on script having run — the
+	// failure mode is a link that looks right and drags nothing.
+	BookmarkletHref template.HTMLAttr
+
+	// BookmarkletText is the same URL as copyable text, for browsers that
+	// refuse to create a bookmark from a dragged javascript: link.
+	BookmarkletText string
 }
 
 // handleBookmarks lists bookmarks, filtered by a search or a tag.
@@ -78,7 +90,10 @@ func (s *Server) handleBookmarks(w http.ResponseWriter, r *http.Request) {
 		Tag:       tag,
 		Bookmarks: list,
 		Tags:      tags,
-		BaseURL:   s.cfg.BaseURL,
+
+		//nolint:gosec // G203: built from validated config, never from a request
+		BookmarkletHref: template.HTMLAttr(`href="` + html.EscapeString(s.bookmarklet()) + `"`),
+		BookmarkletText: s.bookmarklet(),
 	}
 
 	if err := s.tmpl.ExecuteTemplate(w, "bookmarks.html", data); err != nil {
@@ -106,6 +121,12 @@ func (s *Server) handleBookmarkForm(w http.ResponseWriter, r *http.Request) {
 		Title: strings.TrimSpace(q.Get("title")),
 	}
 
+	// Whether this closes itself on save depends on how it was opened, not on
+	// the form. Hardcoding it left a manual add staring at a bare "Saved."
+	// page, because window.close() does nothing to a tab the script did not
+	// open.
+	popup := q.Get("popup") != ""
+
 	// Editing an existing bookmark loads it, so the popup is one page for both
 	// jobs rather than two that drift apart.
 	if id, err := strconv.ParseInt(q.Get("id"), 10, 64); err == nil {
@@ -132,6 +153,7 @@ func (s *Server) handleBookmarkForm(w http.ResponseWriter, r *http.Request) {
 		Title: s.cfg.Title,
 		CSS:   s.css,
 		Form:  form,
+		Popup: popup,
 	})
 	if err != nil {
 		s.log.Error("render bookmark form", "error", err)
@@ -200,6 +222,22 @@ func (s *Server) handleBookmarkDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.Redirect(w, r, "/bookmarks", http.StatusSeeOther)
+}
+
+// bookmarklet is the javascript: URL to drag onto a bookmarks bar.
+//
+// It opens the add page in a popup rather than posting in the background:
+// behind an authenticating proxy an expired session answers a cross-origin
+// fetch with a redirect to a login page, which fails silently. A navigation
+// carries the session cookie and can be signed back in.
+//
+// Single quotes throughout, so the string survives being placed in a
+// double-quoted HTML attribute.
+func (s *Server) bookmarklet() string {
+	return "javascript:(function(){window.open('" +
+		strings.TrimRight(s.cfg.BaseURL, "/") + "/bookmarks/new?popup=1&url='" +
+		"+encodeURIComponent(location.href)+'&title='" +
+		"+encodeURIComponent(document.title),'scryglass','width=560,height=460');})();"
 }
 
 func splitTags(s string) []string {
