@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: authelia
+  labels:
+    app.kubernetes.io/name: authelia
+spec:
+  replicas: 1
+  # The PVC is ReadWriteOnce and SQLite wants one writer, so the old pod must be
+  # gone before the new one starts. RollingUpdate would deadlock on the volume.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: authelia
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: authelia
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: authelia
+          image: ghcr.io/authelia/authelia:4.39.20
+          args:
+            - '--config'
+            - '/etc/authelia/configuration.yml'
+          ports:
+            - name: http
+              containerPort: 9091
+          env:
+            # Secrets are supplied as files rather than values so they do not
+            # appear in `kubectl describe pod` or in the container's environment.
+            - name: AUTHELIA_SESSION_SECRET_FILE
+              value: '/secrets/session-secret'
+            - name: AUTHELIA_STORAGE_ENCRYPTION_KEY_FILE
+              value: '/secrets/storage-encryption-key'
+            # Supplied even though password reset is disabled: the identity
+            # validation block is validated at startup. If a future release
+            # stops requiring it, this can go.
+            - name: AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET_FILE
+              value: '/secrets/jwt-secret'
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ['ALL']
+          volumeMounts:
+            - name: config
+              mountPath: /etc/authelia/configuration.yml
+              subPath: configuration.yml
+              readOnly: true
+            - name: users
+              mountPath: /etc/authelia/users_database.yml
+              subPath: users_database.yml
+              readOnly: true
+            - name: secrets
+              mountPath: /secrets
+              readOnly: true
+            # State: the SQLite database holding every registered passkey and
+            # TOTP secret, plus the notification file.
+            - name: data
+              mountPath: /config
+            - name: tmp
+              mountPath: /tmp
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+      volumes:
+        - name: config
+          configMap:
+            name: authelia-config
+        - name: users
+          secret:
+            secretName: authelia-users
+        - name: secrets
+          secret:
+            secretName: authelia-secrets
+        - name: data
+          persistentVolumeClaim:
+            claimName: authelia
+        - name: tmp
+          emptyDir: {}

@@ -1,0 +1,54 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# A worked example. Copy it to deploy/authelia/overlays/local — which is
+# gitignored, because a host list is a map of somebody's network and this
+# repository is published — then put your real hosts in configuration.yml and
+# delete whatever does not apply to your cluster.
+
+namespace: authelia
+
+resources:
+  - ../../base
+
+# Replaces the base ConfigMap wholesale rather than patching it. Access-control
+# rules are a list, and patching a list by index is how a rule ends up applying
+# to the wrong host after somebody inserts a line above it.
+configMapGenerator:
+  - name: authelia-config
+    behavior: replace
+    files:
+      - configuration.yml
+
+patches:
+  - target:
+      kind: Ingress
+      name: authelia
+    patch: |
+      - op: replace
+        path: /spec/rules/0/host
+        value: auth.example.com
+
+  # Naming the class here means a change to the cluster default cannot silently
+  # move the passkey database onto different storage. It must be block mode.
+  - target:
+      kind: PersistentVolumeClaim
+      name: authelia
+    patch: |
+      - op: add
+        path: /spec/storageClassName
+        value: REPLACE-block-storage-class
+
+# The base already pins the release. This block exists only to hold a version
+# back or move it forward independently of the checkout.
+#
+# For an exact-bytes guarantee use the digest instead of the tag — 4.39.20 is
+# sha256:1b363e9279e742397966333f364e0876ae02bf5c876de73e83af6d48c57ff51b —
+# which also means a re-tagged upstream image cannot change under you:
+#
+#   images:
+#     - name: ghcr.io/authelia/authelia
+#       digest: sha256:1b363e...
+images:
+  - name: ghcr.io/authelia/authelia
+    newTag: 4.39.20

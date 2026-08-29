@@ -1,0 +1,44 @@
+---
+##
+## The shape of the `authelia-users` Secret's users_database.yml key.
+##
+## This file is documentation. It is NOT applied by any kustomization, and the
+## real one never enters this repository — it contains password hashes.
+##
+## Create the Secret by hand:
+##
+##   kubectl -n authelia create secret generic authelia-users \
+##     --from-file=users_database.yml=./users_database.yml
+##
+## Generate a hash with:
+##
+##   kubectl -n authelia exec deploy/authelia -- \
+##     authelia crypto hash generate argon2 --password 'the-password'
+##
+## Editing the Secret is how user administration happens here: password reset
+## and password change are both disabled, because there is no mail path and the
+## file is mounted read-only. That is accepted, not a gap — but it does mean
+## you are the reset mechanism for everybody in this file.
+##
+## `groups` is what access-control rules match on via `subject: ['group:name']`.
+##
+
+users:
+  someone:
+    disabled: false
+    displayname: 'Someone'
+    # Required even where sign-in is by passkey: a passkey is what you log in
+    # WITH, it is not a passwordless account. The hash below is the fallback
+    # credential and the recovery path if a passkey is lost.
+    password: '$argon2id$v=19$m=65536,t=3,p=4$REPLACE'
+    email: 'someone@example.com'
+    groups:
+      - 'admins'
+
+  someone-else:
+    disabled: false
+    displayname: 'Someone Else'
+    password: '$argon2id$v=19$m=65536,t=3,p=4$REPLACE'
+    email: 'someone-else@example.com'
+    groups:
+      - 'family'

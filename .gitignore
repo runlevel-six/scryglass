@@ -3,8 +3,13 @@
 docs/plan.md
 docs/pending-decisions.md
 
-# Deployment overlays carry real hostnames, image digests and cluster specifics.
-deploy/overlays/
+# Real overlays. A host list is a map of someone's network and this repository
+# is published; deploy/*/overlays/example is the committed worked copy, the
+# working one stays here. Also keeps the real users_database.yml — password
+# hashes — from ever being staged.
+/deploy/*/overlays/local/
+users_database.yml
+!**/users_database.example.yml
 
 # Go build output
 /scryglass

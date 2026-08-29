@@ -1,0 +1,53 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# The namespace is not created here. Creating a namespace from the same
+# kustomization that fills it means `kubectl delete -k` takes the namespace with
+# it, and with the namespace goes the PersistentVolumeClaim holding every
+# registered passkey and TOTP secret. Re-enrolling those is a manual, by-hand
+# job for every user. Create the namespace once, by hand.
+namespace: authelia
+
+resources:
+  - pvc.yaml
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/part-of: authelia
+      app.kubernetes.io/managed-by: kustomize
+
+# The one place the deployed version is chosen.
+#
+# Never a moving tag here, and for this workload the reason is sharper than
+# usual: Authelia has shipped breaking configuration migrations between minor
+# versions. An unattended pull that lands on a release which cannot parse this
+# config does not degrade — it locks every protected host at once, including
+# the portal you would use to fix it.
+images:
+  - name: ghcr.io/authelia/authelia
+    newTag: 4.39.20
+
+configMapGenerator:
+  - name: authelia-config
+    files:
+      - configuration.yml
+
+# Two Secrets are deliberately absent, because this repository is published.
+# Create both by hand in the `authelia` namespace before the first apply.
+#
+#   authelia-secrets      three random values, each its own key:
+#                           session-secret          64 random chars
+#                           storage-encryption-key  64 random chars — see the
+#                                                   warning in configuration.yml,
+#                                                   this one cannot be changed by
+#                                                   editing it later
+#                           jwt-secret              64 random chars
+#
+#   authelia-users        one key, users_database.yml, holding the file
+#                         documented in overlays/example/users_database.example.yml
+#
+# Generate values with:  head -c 64 /dev/urandom | base64 | tr -d '\n='

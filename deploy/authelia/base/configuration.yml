@@ -1,0 +1,144 @@
+---
+##
+## Authelia — base configuration.
+##
+## Genericised on purpose: every host below is `example.com`, because this
+## repository is published. The real hosts, the real access rules and the real
+## cookie domain live in a gitignored overlay. See overlays/example.
+##
+## Written against v4.39.20. Configuration keys move between minor versions —
+## check this file against the release you are pinned to before bumping.
+##
+
+theme: 'auto'
+
+server:
+  address: 'tcp://:9091/'
+
+log:
+  level: 'info'
+  format: 'text'
+
+totp:
+  issuer: 'example.com'
+
+##
+## Passkeys.
+##
+## Two of these defaults would silently defeat the whole point:
+##
+##   enable_passkey_login defaults to FALSE. Without it you get WebAuthn as a
+##   second factor after a password, not a passkey as the first factor.
+##
+##   selection_criteria.discoverability defaults to 'discouraged'. Passkey login
+##   requires a *discoverable* (resident) credential, so a passkey registered
+##   under the default may simply not be offered at sign-in.
+##
+webauthn:
+  disable: false
+  enable_passkey_login: true
+  display_name: 'Example'
+
+  selection_criteria:
+    # 'cross-platform' is correct for passkeys held in a syncing password
+    # manager. Use 'platform' only if you want credentials bound to one device's
+    # secure enclave, which cannot be synced.
+    attachment: 'cross-platform'
+
+    # 'required' guarantees every registered credential can be used for
+    # passwordless sign-in. If an authenticator refuses registration under it,
+    # 'preferred' is the fallback — at the cost of allowing registrations that
+    # will not work for passkey login.
+    discoverability: 'required'
+
+    user_verification: 'preferred'
+
+authentication_backend:
+  # Re-reads the users file when it changes, so adding a user is editing the
+  # Secret rather than restarting the pod. Kubernetes propagates a Secret update
+  # by swapping a symlink; if a change is not picked up, roll the Deployment.
+  watch: true
+
+  file:
+    path: '/etc/authelia/users_database.yml'
+
+  # Both are disabled deliberately, and they are two different things.
+  #
+  # There is no SMTP on this cluster and that is a preference, not a gap — so
+  # the reset flow could only ever render a "check your email" dead end that
+  # looks like a bug. Password changes are disabled because the users file is
+  # mounted from a Secret and is therefore read-only; leaving the flow enabled
+  # would offer a button that fails at write time.
+  #
+  # Consequence, accepted: user administration is editing the Secret by hand.
+  password_reset:
+    disable: true
+  password_change:
+    disable: true
+
+access_control:
+  # Deny is also Authelia's own default. Stated explicitly because it is the
+  # single most important line in this file: a host with no matching rule is
+  # refused rather than quietly published.
+  default_policy: 'deny'
+
+  rules:
+    # A worked shape only — the real rules live in the overlay.
+    - domain: 'public.example.com'
+      policy: 'bypass'
+
+    - domain: 'photos.example.com'
+      policy: 'one_factor'
+      subject:
+        - 'group:family'
+        - 'group:admins'
+
+    - domain: '*.example.com'
+      policy: 'one_factor'
+      subject:
+        - 'group:admins'
+
+session:
+  # Only actually used with Redis, but the schema wants it and a single-replica
+  # deployment may not stay single-replica.
+  secret: 'replaced-by-AUTHELIA_SESSION_SECRET_FILE'
+
+  cookies:
+    - name: 'authelia_session'
+
+      # MUST be the parent domain, not the portal's own host. This is the most
+      # common forward-auth misconfiguration there is: a cookie scoped to
+      # auth.example.com authenticates auth.example.com and nothing else, and
+      # the failure looks like an endless redirect loop rather than a config
+      # error.
+      domain: 'example.com'
+      authelia_url: 'https://auth.example.com'
+
+      same_site: 'lax'
+
+      # Long deliberately. The protected surface includes a browser new-tab
+      # page, so a short session means bouncing through the portal all day.
+      inactivity: '7 days'
+      expiration: '30 days'
+      remember_me: '90 days'
+
+storage:
+  # The encryption key is supplied by AUTHELIA_STORAGE_ENCRYPTION_KEY_FILE.
+  #
+  # Read this before you generate it: once the database has been written with a
+  # key, changing it means running an Authelia CLI migration against the
+  # database. It is not an edit-and-restart value. Generate it once, back it up
+  # with the rest of the break-glass material, and do not rotate it casually.
+  local:
+    path: '/config/db.sqlite3'
+
+notifier:
+  # No SMTP on this cluster, by preference. Enrollment links are written to a
+  # file on the PVC — not an emptyDir, because an enrollment link has to survive
+  # a pod restart — and read out by hand:
+  #
+  #   kubectl -n authelia exec deploy/authelia -- cat /config/notification.txt
+  #
+  # Fine for two admins and a few family members. It would not be fine at twenty.
+  filesystem:
+    filename: '/config/notification.txt'

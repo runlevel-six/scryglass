@@ -1,0 +1,26 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: authelia
+  labels:
+    app.kubernetes.io/name: authelia
+  # No auth annotations here, and that is not an oversight. The portal must
+  # never sit behind itself: gate this host and an unauthenticated user is
+  # redirected to a page they cannot reach in order to authenticate, which is a
+  # redirect loop with no way out short of kubectl.
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: auth.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: authelia
+                port:
+                  name: http
+  # No tls block. The controller this was written against terminates TLS with a
+  # default certificate; if yours does not, add a tls block here. Authelia will
+  # refuse to issue a session cookie over plain HTTP either way.
