@@ -34,6 +34,25 @@ type Resource struct {
 	// photo gallery, "k8s" for a cluster dashboard — whatever you actually
 	// type when you are not thinking about what the thing is called.
 	Aliases []string `yaml:"aliases,omitempty"`
+
+	// Icon names the tile's glyph. Empty means the tile falls back to the
+	// resource's initial.
+	Icon string `yaml:"icon,omitempty"`
+
+	// Check is the URL to probe to decide whether this resource is up. Empty
+	// means it is never probed, which is what makes a bookmark a bookmark.
+	//
+	// This is deliberately not URL. For anything running in the cluster the
+	// two differ and the difference is the point: URL is the public address,
+	// which for a gated host answers every unauthenticated request with a
+	// redirect to a login page. Probing that proves the ingress and the
+	// identity provider are alive and says nothing whatsoever about the
+	// application. Check points at the backing Service instead.
+	Check string `yaml:"check,omitempty"`
+
+	// Retired dims the tile instead of alarming about it. For things that are
+	// deliberately not running rather than unexpectedly down.
+	Retired bool `yaml:"retired,omitempty"`
 }
 
 // Bang is a prefix that routes a query somewhere specific.
