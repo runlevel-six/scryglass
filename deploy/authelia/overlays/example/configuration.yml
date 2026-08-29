@@ -55,13 +55,22 @@ webauthn:
     user_verification: 'preferred'
 
 authentication_backend:
-  # Re-reads the users file when it changes, so adding a user is editing the
-  # Secret rather than restarting the pod. Kubernetes propagates a Secret update
-  # by swapping a symlink; if a change is not picked up, roll the Deployment.
-  watch: true
-
   file:
     path: '/etc/authelia/users_database.yml'
+
+    # Re-reads the users file when it changes, so adding a user is editing the
+    # Secret rather than restarting the pod. Kubernetes propagates a Secret
+    # update by swapping a symlink; if a change is not picked up, roll the
+    # Deployment.
+    #
+    # Nests under `file`, not under `authentication_backend` — the parent does
+    # not accept it.
+    watch: true
+
+    # Upstream calls the file backend dev-only, on the grounds that it prevents
+    # scaling past one instance. That is already this deployment's shape: one
+    # replica, Recreate strategy, a ReadWriteOnce volume and SQLite underneath.
+    # The constraint is accepted, not overlooked.
 
   # Both are disabled deliberately, and they are two different things.
   #

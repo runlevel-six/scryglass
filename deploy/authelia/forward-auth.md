@@ -10,14 +10,27 @@ Add to the Ingress you want to protect:
 metadata:
   annotations:
     nginx.ingress.kubernetes.io/auth-url: >-
-      http://authelia.authelia.svc.cluster.local:9091/api/authz/forward-auth
+      http://authelia.authelia.svc.cluster.local:9091/api/authz/auth-request
     nginx.ingress.kubernetes.io/auth-signin: >-
-      https://auth.example.com/?rd=$target_url
+      https://auth.example.com?rm=$request_method
     nginx.ingress.kubernetes.io/auth-response-headers: >-
-      Remote-User,Remote-Name,Remote-Email,Remote-Groups
-    nginx.ingress.kubernetes.io/auth-snippet: |
-      proxy_set_header X-Forwarded-Method $request_method;
+      Remote-User,Remote-Name,Remote-Groups,Remote-Email
 ```
+
+## Why `auth-request` and not `forward-auth`
+
+Authelia exposes both, and they are different protocols rather than aliases.
+`/api/authz/forward-auth` is the Traefik and Caddy style, which answers with a
+redirect. `/api/authz/auth-request` implements nginx's `auth_request` module,
+which answers 200 or 401 and lets nginx do the redirecting — and
+ingress-nginx's `auth-url` annotation drives exactly that module. Pointing it
+at the forward-auth endpoint is a protocol mismatch.
+
+`rm=$request_method` is likewise not interchangeable with `rd=$target_url`:
+ingress-nginx appends the return destination itself, and what Authelia needs
+passed explicitly is the original request method. With neither set correctly, a
+POST to a protected host can come back as a GET after sign-in — the login
+submits and the original action is silently lost.
 
 ## Before you gate anything, check it is browser-only
 
