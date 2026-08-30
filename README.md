@@ -61,6 +61,7 @@ and no write verbs anywhere.
 | `SCRYGLASS_ADDR` | `:8080` | Listen address. |
 | `SCRYGLASS_TITLE` | `Scryglass` | What the page calls itself. |
 | `SCRYGLASS_DATABASE` | — | Bookmark database. Unset disables bookmarks. |
+| `SCRYGLASS_LOGOUT_URL` | — | Your identity provider's sign-out address. Unset hides the control. |
 | `SCRYGLASS_DISCOVERY` | `false` | Read Ingress objects to build the wall. |
 | `SCRYGLASS_ANNOTATION_PREFIX` | `scryglass.local` | Annotation namespace for per-Ingress overrides. |
 | `SCRYGLASS_DISCOVERY_INTERVAL` | `60s` | How often the cluster is re-read. |

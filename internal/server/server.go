@@ -150,6 +150,8 @@ func (s *Server) Handler() http.Handler {
 type pageData struct {
 	Title      string
 	AssetBase  string
+	User       string
+	LogoutURL  string
 	SearchName string
 	CSS        template.CSS
 	JS         template.JS
@@ -157,7 +159,23 @@ type pageData struct {
 	Groups     []group
 }
 
-func (s *Server) data() pageData {
+// identity is who the authenticating proxy says is asking.
+//
+// Cosmetic only, and it must stay that way. These headers are set by the proxy
+// in front of this, but the Service behind it is reachable by anything in the
+// cluster, so a header is a claim rather than a fact. Nothing here authorizes
+// on it — Scryglass has no authorization to do — and nothing should start.
+func identity(r *http.Request) string {
+	for _, h := range []string{"Remote-Name", "Remote-User"} {
+		if v := strings.TrimSpace(r.Header.Get(h)); v != "" {
+			return v
+		}
+	}
+
+	return ""
+}
+
+func (s *Server) data(r *http.Request) pageData {
 	s.mu.RLock()
 	cat := s.cat
 	s.mu.RUnlock()
@@ -170,6 +188,8 @@ func (s *Server) data() pageData {
 	return pageData{
 		Title:      s.cfg.Title,
 		AssetBase:  assetBase(),
+		User:       identity(r),
+		LogoutURL:  s.cfg.LogoutURL,
 		SearchName: labelOr(cat.Search.Name, "the web"),
 		CSS:        s.css,
 		JS:         s.js,
@@ -185,21 +205,21 @@ func (s *Server) data() pageData {
 // that budget is spent on round trips, not on executing a template over a few
 // dozen tiles, and a cache here would only be somewhere for stale state to
 // hide.
-func (s *Server) handleIndex(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 
-	if err := s.tmpl.ExecuteTemplate(w, "index.html", s.data()); err != nil {
+	if err := s.tmpl.ExecuteTemplate(w, "index.html", s.data(r)); err != nil {
 		s.log.Error("render index", "error", err)
 	}
 }
 
 // handleTiles renders just the wall, for the live update to swap in.
-func (s *Server) handleTiles(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) handleTiles(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 
-	if err := s.tmpl.ExecuteTemplate(w, "tiles", s.data()); err != nil {
+	if err := s.tmpl.ExecuteTemplate(w, "tiles", s.data(r)); err != nil {
 		s.log.Error("render tiles", "error", err)
 	}
 }

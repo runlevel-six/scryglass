@@ -196,3 +196,19 @@ main.narrow { width: min(30rem, 92vw); margin-top: 1.5rem; }
   .brand .mark { width: 56px; }
   .brand h1 { font-size: 1.1rem; }
 }
+
+/* ---- session ------------------------------------------------------------ */
+/* Fixed in the corner rather than in the flow: this page's vertical space
+   belongs to the search box and the wall, and a sign-out control should cost
+   none of it. */
+.session {
+  position: fixed; top: 0; right: 0; z-index: 1;
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.7rem 1rem; font-size: 0.78rem; color: var(--muted);
+}
+.session .who { opacity: 0.8; }
+.session .signout {
+  color: var(--muted); text-decoration: none;
+  padding: 0.15rem 0.5rem; border: 1px solid var(--line); border-radius: 999px;
+}
+.session .signout:hover { color: var(--fg); border-color: var(--muted); }

@@ -9,6 +9,12 @@
 <style>{{.CSS}}</style>
 </head>
 <body>
+{{if or .User .LogoutURL}}
+<div class="session">
+  {{if .User}}<span class="who">{{.User}}</span>{{end}}
+  {{if .LogoutURL}}<a class="signout" href="{{.LogoutURL}}">Sign out</a>{{end}}
+</div>
+{{end}}
 <main>
   <header class="brand">
     {{/* Decorative: the heading beside it already says the name, so

@@ -199,3 +199,77 @@ func TestTilesOpenInANewTab(t *testing.T) {
 		}
 	}
 }
+
+// The sign-out control appears only when an address is configured. There is no
+// sensible default — Authelia ends /logout, oauth2-proxy ends /oauth2/sign_out
+// — and a guess produces a button that looks like it works and does nothing.
+func TestSignOutOnlyWhenConfigured(t *testing.T) {
+	cat := &catalog.Catalog{Search: catalog.Search{URL: "https://s.example/?q={query}"}}
+	if err := cat.Validate(); err != nil {
+		t.Fatal(err)
+	}
+
+	render := func(cfg *config.Config, headers map[string]string) string {
+		s, err := server.New(cfg, cat, nil, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
+		for k, v := range headers {
+			req.Header.Set(k, v)
+		}
+
+		rec := httptest.NewRecorder()
+		s.Handler().ServeHTTP(rec, req)
+
+		return rec.Body.String()
+	}
+
+	bare := &config.Config{BaseURL: "https://home.example", Title: "Scryglass"}
+	if got := render(bare, nil); strings.Contains(got, "Sign out") {
+		t.Error("sign-out rendered with no logout URL configured")
+	}
+
+	withURL := &config.Config{
+		BaseURL: "https://home.example", Title: "Scryglass",
+		LogoutURL: "https://auth.example/logout",
+	}
+
+	body := render(withURL, map[string]string{"Remote-Name": "Somebody"})
+
+	if !strings.Contains(body, "https://auth.example/logout") {
+		t.Error("the configured logout URL is not on the page")
+	}
+
+	if !strings.Contains(body, "Somebody") {
+		t.Error("the proxy-supplied name is not shown")
+	}
+}
+
+// Remote-Name is preferred over Remote-User, since one is a display name and
+// the other is a login.
+func TestIdentityPrefersTheDisplayName(t *testing.T) {
+	cat := &catalog.Catalog{Search: catalog.Search{URL: "https://s.example/?q={query}"}}
+	if err := cat.Validate(); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &config.Config{BaseURL: "https://home.example", Title: "Scryglass", LogoutURL: "https://auth.example/logout"}
+
+	s, err := server.New(cfg, cat, nil, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
+	req.Header.Set("Remote-User", "login")
+	req.Header.Set("Remote-Name", "Display Name")
+
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+
+	if !strings.Contains(rec.Body.String(), "Display Name") {
+		t.Error("Remote-Name should win")
+	}
+}

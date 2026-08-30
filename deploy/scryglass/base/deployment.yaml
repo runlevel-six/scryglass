@@ -82,6 +82,12 @@ spec:
             # every milestone before this one did.
             - name: SCRYGLASS_DATABASE
               value: /var/lib/scryglass/bookmarks.db
+
+            # Your identity provider's sign-out address. No default: it is
+            # provider-specific, and a wrong guess is a button that looks like
+            # it works and does nothing. Unset hides the control.
+            - name: SCRYGLASS_LOGOUT_URL
+              value: REPLACE-https://auth.example.com/logout
           securityContext:
             allowPrivilegeEscalation: false
             # Still safe: everything this writes goes to the mounted volume

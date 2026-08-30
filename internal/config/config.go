@@ -65,6 +65,13 @@ type Config struct {
 	// paired with a long window here will never fill.
 	BarWindow time.Duration
 
+	// LogoutURL is the identity provider's sign-out address.
+	//
+	// No default, because it is provider-specific — Authelia ends /logout,
+	// oauth2-proxy ends /oauth2/sign_out — and a wrong guess produces a button
+	// that appears to work and does nothing. Unset hides the control.
+	LogoutURL string
+
 	// DatabasePath is where bookmarks are stored.
 	//
 	// Empty disables bookmarks entirely, and that is a supported way to run
@@ -102,6 +109,7 @@ func Load() (*Config, error) {
 		Discovery:        isTrue(os.Getenv(Prefix + "DISCOVERY")),
 		AnnotationPrefix: strings.TrimSuffix(envOr("ANNOTATION_PREFIX", "scryglass.local"), "/"),
 		DatabasePath:     os.Getenv(Prefix + "DATABASE"),
+		LogoutURL:        strings.TrimSpace(os.Getenv(Prefix + "LOGOUT_URL")),
 	}
 
 	var durProblems []string
