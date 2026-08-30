@@ -61,7 +61,8 @@ func New(
 ) (*Server, error) {
 	tmpl, err := template.ParseFS(templatesFS,
 		"templates/index.html", "templates/tiles.html", "templates/opensearch.xml",
-		"templates/bookmarks.html", "templates/bookmark_form.html")
+		"templates/bookmarks.html", "templates/bookmark_form.html",
+		"templates/head.html")
 	if err != nil {
 		return nil, fmt.Errorf("parse templates: %w", err)
 	}
@@ -136,6 +137,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /bookmarks/new", s.handleBookmarkForm)
 	mux.HandleFunc("POST /bookmarks", s.handleBookmarkSave)
 	mux.HandleFunc("POST /bookmarks/{id}/delete", s.handleBookmarkDelete)
+	mux.HandleFunc("GET /assets/{version}/{file}", s.handleAsset)
+	mux.HandleFunc("GET /favicon.ico", s.handleFavicon)
 	mux.HandleFunc("GET /opensearch.xml", s.handleDescriptor)
 	mux.HandleFunc("GET /healthz", s.handleHealth)
 	mux.HandleFunc("GET /readyz", s.handleHealth)
@@ -146,6 +149,7 @@ func (s *Server) Handler() http.Handler {
 // pageData is everything the index template needs.
 type pageData struct {
 	Title      string
+	AssetBase  string
 	SearchName string
 	CSS        template.CSS
 	JS         template.JS
@@ -165,6 +169,7 @@ func (s *Server) data() pageData {
 
 	return pageData{
 		Title:      s.cfg.Title,
+		AssetBase:  assetBase(),
 		SearchName: labelOr(cat.Search.Name, "the web"),
 		CSS:        s.css,
 		JS:         s.js,

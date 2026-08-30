@@ -168,3 +168,25 @@ main.narrow { width: min(30rem, 92vw); margin-top: 1.5rem; }
   border-radius: 8px; border: 1px solid var(--line);
   color: var(--fg); text-decoration: none;
 }
+
+/* ---- brand -------------------------------------------------------------- */
+.brand {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 0.4rem; margin-bottom: 1.6rem;
+}
+.brand .mark { display: block; height: auto; }
+.brand h1 {
+  margin: 0; font-weight: 400; font-size: 1.5rem;
+  /* A letterspaced serif, matching the wordmark on the logo sheet. Rendered
+     as text rather than shipped as an image: it stays crisp at any scale,
+     follows the theme, and is readable to a screen reader. */
+  font-family: ui-serif, Georgia, "Times New Roman", serif;
+  letter-spacing: 0.22em; text-indent: 0.22em;
+  text-transform: uppercase;
+}
+@media (max-width: 40rem) {
+  /* On a phone the wall is what you came for; the wordmark is the first
+     thing that can go. */
+  .brand .mark { width: 56px; }
+  .brand h1 { font-size: 1.1rem; }
+}

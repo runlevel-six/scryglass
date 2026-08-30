@@ -16,6 +16,7 @@ import (
 // bookmarkData is what the bookmark templates render.
 type bookmarkData struct {
 	Title     string
+	AssetBase string
 	CSS       template.CSS
 	Query     string
 	Tag       string
@@ -85,6 +86,7 @@ func (s *Server) handleBookmarks(w http.ResponseWriter, r *http.Request) {
 
 	data := bookmarkData{
 		Title:     s.cfg.Title,
+		AssetBase: assetBase(),
 		CSS:       s.css,
 		Query:     query,
 		Tag:       tag,
@@ -150,10 +152,11 @@ func (s *Server) handleBookmarkForm(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 
 	err := s.tmpl.ExecuteTemplate(w, "bookmark_form.html", bookmarkData{
-		Title: s.cfg.Title,
-		CSS:   s.css,
-		Form:  form,
-		Popup: popup,
+		Title:     s.cfg.Title,
+		AssetBase: assetBase(),
+		CSS:       s.css,
+		Form:      form,
+		Popup:     popup,
 	})
 	if err != nil {
 		s.log.Error("render bookmark form", "error", err)

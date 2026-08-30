@@ -260,3 +260,54 @@ func TestPageExplainsTheFirefoxLimitation(t *testing.T) {
 		}
 	}
 }
+
+// Assets are served from an allowlist built at startup, so a request never
+// names a file path. Reading a file named by a request is how traversal
+// happens, and a name that is not in the map is simply not a file here.
+func TestAssetsAreServedFromAnAllowlist(t *testing.T) {
+	h, _ := newBookmarkServer(t)
+
+	for _, name := range []string{"mark.png", "icon-32.png", "icon-180.png"} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/assets/dev/"+name, nil))
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("%s: status = %d", name, rec.Code)
+		}
+
+		if ct := rec.Header().Get("Content-Type"); ct != "image/png" {
+			t.Errorf("%s: Content-Type = %q", name, ct)
+		}
+
+		// Immutable, because the version is in the path.
+		if cc := rec.Header().Get("Cache-Control"); !strings.Contains(cc, "immutable") {
+			t.Errorf("%s: Cache-Control = %q", name, cc)
+		}
+	}
+
+	for _, bad := range []string{"../../etc/passwd", "..%2f..%2fgo.mod", "nope.png", ""} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/assets/dev/"+bad, nil))
+
+		if rec.Code == http.StatusOK {
+			t.Errorf("%q was served", bad)
+		}
+	}
+}
+
+// Browsers request /favicon.ico whether or not a page links one, always at
+// that path — so it cannot be versioned, and must not be cached for a year.
+func TestFaviconIsServedUnversioned(t *testing.T) {
+	h, _ := newBookmarkServer(t)
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/favicon.ico", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+
+	if cc := rec.Header().Get("Cache-Control"); strings.Contains(cc, "immutable") {
+		t.Errorf("Cache-Control = %q; this URL is stable across releases and must not be immutable", cc)
+	}
+}

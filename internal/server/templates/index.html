@@ -5,10 +5,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{.Title}}</title>
 <link rel="search" type="application/opensearchdescription+xml" title="{{.Title}}" href="/opensearch.xml">
+{{template "icons" .}}
 <style>{{.CSS}}</style>
 </head>
 <body>
 <main>
+  <header class="brand">
+    {{/* Decorative: the heading beside it already says the name, so
+         announcing it twice helps nobody. Width and height are set so the
+         page does not reflow when the image arrives — this is a new-tab
+         page, and a jump under the cursor costs a keystroke. */}}
+    <img class="mark" src="{{.AssetBase}}mark.png" width="80" height="80" alt="">
+    <h1>{{.Title}}</h1>
+  </header>
+
   <form action="/search" method="get" role="search">
     <input type="search" name="q" autofocus autocomplete="off" autocapitalize="off"
            spellcheck="false" aria-label="Search or jump to" placeholder="Search, or type a name&hellip;">

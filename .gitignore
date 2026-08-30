@@ -33,3 +33,11 @@ coverage.out
 *-concept-sheet.png
 /design/
 /Screenshot*.png
+
+# Logo masters. The derived assets under internal/server/assets are what ships;
+# these are the full-resolution sources they were cut from, and they live
+# outside the tree. Keep them somewhere safe — regenerating from a prompt will
+# not produce the same instrument twice.
+/full-mark.png
+/app-icon.png
+/micro-icon.png
