@@ -13,7 +13,7 @@ func TestGroupsPreserveFirstAppearanceOrder(t *testing.T) {
 	now := time.Now()
 	got := groupsFrom([]probe.Status{
 		{Resource: catalog.Resource{Name: "A", Group: "media"}},
-		{Resource: catalog.Resource{Name: "B", Group: ""}},
+		{Resource: catalog.Resource{Name: "B", Group: "personal"}},
 		{Resource: catalog.Resource{Name: "C", Group: "media"}},
 	}, now, 30*time.Second, 30*time.Minute)
 
@@ -25,8 +25,47 @@ func TestGroupsPreserveFirstAppearanceOrder(t *testing.T) {
 		t.Errorf("group 0 = %+v", got[0])
 	}
 
-	if got[1].Name != "" || len(got[1].Tiles) != 1 {
-		t.Errorf("group 1 = %+v", got[1])
+	if got[1].Name != "personal" {
+		t.Errorf("group 1 = %q, want the order they first appeared", got[1].Name)
+	}
+}
+
+// Ungrouped tiles go last and get a label. Rendered unlabeled and in place
+// they read as belonging to whichever heading precedes them, which is exactly
+// what discovered tiles did underneath a hand-written one.
+func TestUngroupedTilesAreLabelledAndLast(t *testing.T) {
+	got := groupsFrom([]probe.Status{
+		{Resource: catalog.Resource{Name: "loose"}},
+		{Resource: catalog.Resource{Name: "A", Group: "media"}},
+	}, time.Now(), 30*time.Second, 30*time.Minute)
+
+	if len(got) != 2 {
+		t.Fatalf("got %d groups, want 2", len(got))
+	}
+
+	if got[0].Name != "media" {
+		t.Errorf("named groups should come first, got %q", got[0].Name)
+	}
+
+	if got[1].Name != "other" || len(got[1].Tiles) != 1 {
+		t.Errorf("group 1 = %+v, want a labeled 'other'", got[1])
+	}
+}
+
+// But when nothing is grouped, a lone "other" heading over the whole wall is
+// worse than no heading at all.
+func TestNoLabelWhenNothingIsGrouped(t *testing.T) {
+	got := groupsFrom([]probe.Status{
+		{Resource: catalog.Resource{Name: "A"}},
+		{Resource: catalog.Resource{Name: "B"}},
+	}, time.Now(), 30*time.Second, 30*time.Minute)
+
+	if len(got) != 1 {
+		t.Fatalf("got %d groups, want 1", len(got))
+	}
+
+	if got[0].Name != "" {
+		t.Errorf("Name = %q, want no heading when there is nothing to distinguish from", got[0].Name)
 	}
 }
 

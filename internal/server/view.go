@@ -43,9 +43,38 @@ func groupsFrom(statuses []probe.Status, now time.Time, interval, window time.Du
 		byName[name] = append(byName[name], tileFrom(s, now, interval, window))
 	}
 
-	out := make([]group, 0, len(order))
+	// The unnamed group goes last and gets a label, but only when there is
+	// something to distinguish it from.
+	//
+	// Rendered unlabeled and in place, it reads as belonging to whichever
+	// group happens to precede it — which is exactly what discovered tiles did
+	// underneath a hand-written "personal" heading. When nothing is grouped at
+	// all, a lone "Other" heading over the whole wall is worse than none.
+	named := 0
+
 	for _, name := range order {
+		if name != "" {
+			named++
+		}
+	}
+
+	out := make([]group, 0, len(order))
+
+	for _, name := range order {
+		if name == "" {
+			continue
+		}
+
 		out = append(out, group{Name: name, Tiles: byName[name]})
+	}
+
+	if rest, ok := byName[""]; ok {
+		label := ""
+		if named > 0 {
+			label = "other"
+		}
+
+		out = append(out, group{Name: label, Tiles: rest})
 	}
 
 	return out
