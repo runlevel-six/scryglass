@@ -80,12 +80,18 @@ input[type=search]:focus { outline: 2px solid #6b8afd; outline-offset: 1px; }
 .state-retired .dot,
 .state-unmonitored .dot { background: transparent; border: 1px solid var(--muted); }
 
-/* Status bar: one row of thin blocks, oldest left, now at the right edge. */
-.bar { display: flex; gap: 1px; height: 0.3rem; }
+/* Status bar: one row of thin blocks, oldest left, now at the right edge.
+   Taller than it looks like it needs to be, because at 3px a row of blocks
+   reads as a dashed rule rather than a bar. */
+.bar { display: flex; gap: 1px; height: 0.4rem; }
 .seg { flex: 1 1 0; border-radius: 1px; min-width: 0; }
 .seg-up   { background: #2f9e5f; }
 .seg-down { background: #d1443c; }
-.seg-none { background: var(--line); }
+/* Barely there, deliberately. A segment with no samples is a stretch of time
+   this process has not been running for, and after a restart that is almost
+   the whole bar — drawn at any real contrast it looks like a dotted line with
+   a stray dot on the end rather than a bar filling in from the right. */
+.seg-none { background: color-mix(in srgb, var(--line) 45%, transparent); }
 
 /* ---- bookmarks ---------------------------------------------------------- */
 body.page { display: block; place-items: initial; }
