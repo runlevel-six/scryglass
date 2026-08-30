@@ -72,6 +72,16 @@ and no write verbs anywhere.
 `catalog.example.yaml` documents the catalog format, including how a
 hand-written entry corrects a discovered one.
 
+## Documentation
+
+[**docs/**](docs/index.md) — a tutorial that takes you from nothing to a working
+board, how-to guides for the browser setup and the proxy, a reference for the
+configuration and the annotations, and an explanation of why it probes Services
+rather than public addresses.
+
+When something is wrong, [troubleshooting](docs/explanation/troubleshooting.md)
+is organized by symptom.
+
 ## A note on what it does not do
 
 There is no alerting. The question this answers is "what is red when I look at

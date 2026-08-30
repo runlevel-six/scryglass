@@ -48,6 +48,19 @@ jobs:
             exit 1
           fi
 
+      # Cheap, and it catches the half-finished release: manifests that name
+      # one version, that version being a real release rather than a moving
+      # tag, and — on a tag — that version being the one being cut. Every
+      # committed manifest here pinned v0.1.0 across five milestones, which is
+      # a failure mode with no symptom until somebody deploys from the repo.
+      - name: Check the release pins
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            ./scripts/check-release.sh "${{ github.ref_name }}"
+          else
+            ./scripts/check-release.sh
+          fi
+
       - name: Vet
         run: go vet ./...
 
