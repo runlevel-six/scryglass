@@ -20,7 +20,7 @@ labels:
 
 images:
   - name: ghcr.io/runlevel-six/scryglass
-    newTag: v0.1.0
+    newTag: v0.6.0
 
 # The catalog ships as a generated ConfigMap so that editing it produces a new
 # name, which rolls the Deployment. The binary reads the file once at startup

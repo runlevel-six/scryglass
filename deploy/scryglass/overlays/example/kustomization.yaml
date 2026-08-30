@@ -42,11 +42,29 @@ patches:
   - target:
       kind: Deployment
       name: scryglass
+    # A strategic merge patch rather than a JSON patch by index.
+    #
+    # env merges on the `name` key, so these land on the right variables
+    # whatever order the base lists them in and whatever it adds later. The
+    # index form is silently wrong the first time a variable is inserted above
+    # the one being patched — it overwrites its neighbour, and the symptom is
+    # a setting that mysteriously has someone else's value.
     patch: |
-      - op: replace
-        path: /spec/template/spec/containers/0/env/2/value
-        value: https://home.example.com
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: scryglass
+      spec:
+        template:
+          spec:
+            containers:
+              - name: scryglass
+                env:
+                  - name: SCRYGLASS_BASE_URL
+                    value: https://home.example.com
+                  - name: SCRYGLASS_LOGOUT_URL
+                    value: https://auth.example.com/logout
 
 images:
   - name: ghcr.io/runlevel-six/scryglass
-    newTag: v0.1.0
+    newTag: v0.6.0
