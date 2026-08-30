@@ -241,3 +241,22 @@ func TestManualSaveRedirectsToTheList(t *testing.T) {
 		t.Fatalf("status = %d, Location = %q; want 303 to /bookmarks", rec.Code, rec.Header().Get("Location"))
 	}
 }
+
+// Firefox refuses to create a bookmark from a dragged javascript: link, and
+// does so silently — the drag simply produces nothing. The page has to say so,
+// because the alternative is somebody concluding the feature is broken when
+// the link itself works perfectly on click.
+func TestPageExplainsTheFirefoxLimitation(t *testing.T) {
+	h, _ := newBookmarkServer(t)
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/bookmarks", nil))
+
+	body := rec.Body.String()
+
+	for _, want := range []string{"Firefox", "Add Bookmark", `class="copyable"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the page does not explain the drag limitation: missing %q", want)
+		}
+	}
+}
