@@ -35,9 +35,6 @@ patches:
       - op: replace
         path: /spec/rules/0/host
         value: home.example.com
-      - op: replace
-        path: /metadata/annotations/nginx.ingress.kubernetes.io~1auth-signin
-        value: https://auth.example.com?rm=$request_method
 
   - target:
       kind: Deployment

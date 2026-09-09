@@ -4,8 +4,10 @@ Scryglass has no authentication of its own, and should not gain any. It is an
 omnibox over your own services and a list of everything you run — reachable
 without a gate, it hands anyone a search box into your infrastructure.
 
-This is written against ingress-nginx and Authelia. The shape is the same for
-oauth2-proxy, Authentik, or anything else that speaks `auth_request`.
+This is written against Traefik and Authelia. The shape is the same for
+ingress-nginx, oauth2-proxy, Authentik, or anything else that can ask an
+external service whether a request is allowed — only the endpoint path and one
+annotation change, and both are called out below.
 
 ## Annotate the Ingress
 
@@ -13,32 +15,43 @@ oauth2-proxy, Authentik, or anything else that speaks `auth_request`.
 metadata:
   annotations:
     nginx.ingress.kubernetes.io/auth-url: >-
-      http://authelia.authelia.svc.cluster.local:9091/api/authz/auth-request
-    nginx.ingress.kubernetes.io/auth-signin: >-
-      https://auth.example.com?rm=$request_method
+      http://authelia.authelia.svc.cluster.local:9091/api/authz/forward-auth
     nginx.ingress.kubernetes.io/auth-response-headers: >-
       Remote-User,Remote-Name,Remote-Groups,Remote-Email
 ```
 
-Three details in there are easy to get wrong and fail in ways that do not look
-like configuration errors.
+Yes, those are `nginx.ingress.kubernetes.io` annotations on a Traefik
+deployment. Traefik v3.7's ingress-nginx compatibility provider reads them
+directly, which is what makes this portable — see
+`deploy/authelia/forward-auth.md`.
 
-**`auth-request`, not `forward-auth`.** Authelia exposes both and they are
-different protocols rather than aliases. `forward-auth` answers with a redirect
-and is what Traefik and Caddy want; `auth-request` answers 200 or 401 and lets
-nginx do the redirecting, which is what the `auth-url` annotation drives.
+Two details are easy to get wrong and fail in ways that do not look like
+configuration errors.
 
-**`rm=$request_method`, not `rd=$target_url`.** ingress-nginx appends the
-return destination itself; what has to be passed explicitly is the original
-method. Without it, a POST to a protected page comes back as a GET after
-sign-in — the login succeeds and the action you took vanishes.
+**The endpoint path has to match the proxy, not the annotation.** Authelia
+exposes one per proxy and they are different protocols:
+`/api/authz/forward-auth` reads the `X-Forwarded-*` headers Traefik and Caddy
+send and answers with a redirect; `/api/authz/auth-request` reads the
+`X-Original-URL` header ingress-nginx sends and answers 200 or 401. On
+ingress-nginx, use `auth-request` and add:
 
-**The sign-in host has to be right, and a typo does not look like one.** nginx
-redirects to whatever the annotation says. A host that does not resolve
-produces a browser-level connection failure naming a hostname close enough to
-the real one to read as "the identity provider is down". If signing in directly
-works but arriving via Scryglass does not, read that annotation character by
-character.
+```yaml
+    nginx.ingress.kubernetes.io/auth-signin: >-
+      https://auth.example.com?rm=$request_method
+```
+
+Mismatch fails closed. Traefik against the nginx endpoint answers a bare **400**
+to every request, and the only explanation is in Authelia's log. Note that
+Traefik's *nginx compatibility provider* still needs `forward-auth`: the
+annotations are nginx-flavored but Traefik is the one asking.
+
+**`auth-signin` belongs to ingress-nginx only.** On the forward-auth endpoint
+Authelia builds the redirect itself and supplies both `rd=` and `rm=`, taking
+the method from `X-Forwarded-Method`. A GET gets a 302, a POST gets a 303 with
+`rm=POST` — so the classic failure this annotation guarded against, a POST
+returning as a GET after sign-in with the action silently lost, does not arise.
+On ingress-nginx it is required, and `rm=$request_method` is the part that
+matters, not `rd=`.
 
 ## Add the sign-out control
 

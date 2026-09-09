@@ -47,9 +47,19 @@ hour it never observed.
 
 ## Tiles show but never update without a refresh
 
-The event stream is not reaching the browser. Check that whatever sits in front
-is not buffering it — nginx honours `X-Accel-Buffering: no`, which Scryglass
-sends, but other proxies need telling.
+The event stream is not reaching the browser, because something in front of it
+is buffering the response.
+
+Scryglass sends `X-Accel-Buffering: no`, which is an **nginx-specific** hint.
+ingress-nginx honors it; most other proxies ignore it entirely, so it is a hint
+and not a guarantee.
+
+On Traefik it is ignored — and the stream works anyway, for a different reason:
+Traefik does not buffer responses at all unless a Buffering middleware is
+configured, and the ingress-nginx compatibility provider only builds one when
+`proxyBuffering` is enabled. So the thing to check is not the header but that
+setting. Turning response buffering on breaks this stream, and
+`X-Accel-Buffering` will not save it.
 
 If the page is behind an authenticating proxy and this started after a while,
 it is a session expiry: the client detects a redirected fetch and reloads,
@@ -57,13 +67,22 @@ which is the only thing that can actually sign you back in.
 
 ## Signing out, then visiting, fails to load the sign-in page
 
-The `auth-signin` annotation. nginx redirects to whatever it says, and a host
-that does not resolve produces a browser-level connection failure naming a
-hostname close enough to the real one to read as "the identity provider is
-down".
+The sign-in host is wrong, and a typo there does not look like one: it produces
+a browser-level connection failure naming a hostname close enough to the real
+one to read as "the identity provider is down".
 
-The tell: going to the identity provider **directly** works, and only arriving
-via Scryglass fails. That path never touches the annotation.
+Where that host comes from depends on the proxy. On ingress-nginx it is the
+`auth-signin` annotation, and nginx redirects to whatever it says. On Traefik
+there is no such annotation — Authelia builds the redirect itself from
+`session.cookies[].authelia_url` in its own configuration, so a wrong host is
+an Authelia config error rather than an Ingress one.
+
+The tell is the same either way: going to the identity provider **directly**
+works, and only arriving via Scryglass fails. That path never touches the
+redirect.
+
+A bare **400** instead is a different fault — the `auth-url` endpoint does not
+match the proxy. See `deploy/authelia/forward-auth.md`.
 
 ```sh
 kubectl -n scryglass get ingress scryglass \

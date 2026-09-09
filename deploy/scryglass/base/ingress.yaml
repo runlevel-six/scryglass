@@ -8,12 +8,23 @@ metadata:
     # Gated. This is the omnibox over your own things: an ungated one hands
     # anybody a search box into your archive and your bookmarks.
     #
-    # See deploy/authelia/forward-auth.md for why this is auth-request rather
-    # than forward-auth, and why rm= rather than rd=.
+    # THE ENDPOINT PATH DEPENDS ON YOUR INGRESS CONTROLLER, and getting it
+    # wrong fails closed with a bare 400 on every request. Authelia exposes one
+    # authz endpoint per proxy because each proxy describes the original request
+    # differently:
+    #
+    #   /api/authz/forward-auth    Traefik, Caddy — reads X-Forwarded-*
+    #   /api/authz/auth-request    ingress-nginx  — reads X-Original-URL
+    #
+    # This value is the Traefik one. On ingress-nginx, change it to
+    # auth-request and add back the auth-signin annotation. Note that Traefik's
+    # ingress-nginx compatibility provider still needs forward-auth: it reads
+    # these nginx annotations, but it is Traefik doing the asking.
+    #
+    # See deploy/authelia/forward-auth.md for the whole story, including why
+    # there is no auth-signin here.
     nginx.ingress.kubernetes.io/auth-url: >-
-      http://authelia.authelia.svc.cluster.local:9091/api/authz/auth-request
-    nginx.ingress.kubernetes.io/auth-signin: >-
-      https://auth.example.com?rm=$request_method
+      http://authelia.authelia.svc.cluster.local:9091/api/authz/forward-auth
     nginx.ingress.kubernetes.io/auth-response-headers: >-
       Remote-User,Remote-Name,Remote-Groups,Remote-Email
 spec:
