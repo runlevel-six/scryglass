@@ -64,4 +64,4 @@ patches:
 
 images:
   - name: ghcr.io/runlevel-six/scryglass
-    newTag: v0.7.0
+    newTag: v0.7.1
