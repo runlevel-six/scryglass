@@ -163,6 +163,16 @@ func (p *Prober) SetResources(resources []catalog.Resource) {
 	order := make([]string, 0, len(resources))
 
 	for _, r := range resources {
+		// The URL is the key, so two resources sharing one would otherwise
+		// both land in order while only the last survives in entries: one
+		// tile drawn twice under the second one's name. The first wins, which
+		// is the file entry when the file and discovery both name it.
+		if _, dup := next[r.URL]; dup {
+			p.log.Warn("duplicate resource URL, keeping the first", "url", r.URL, "dropped", r.Name)
+
+			continue
+		}
+
 		order = append(order, r.URL)
 
 		if existing, ok := p.entries[r.URL]; ok {

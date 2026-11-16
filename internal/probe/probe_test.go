@@ -262,3 +262,23 @@ func TestSetResourcesNotifiesWhenTheSetChanges(t *testing.T) {
 	case <-time.After(200 * time.Millisecond):
 	}
 }
+
+// Two resources sharing a URL are one tile, not the same entry drawn twice
+// under the last one's name. The first wins.
+func TestDuplicateURLIsOneTile(t *testing.T) {
+	p := probe.New(probe.Options{})
+	p.SetResources([]catalog.Resource{
+		{Name: "First", URL: "https://a.example"},
+		{Name: "Second", URL: "https://a.example"},
+		{Name: "Other", URL: "https://b.example"},
+	})
+
+	snap := p.Snapshot()
+	if len(snap) != 2 {
+		t.Fatalf("snapshot has %d entries, want 2", len(snap))
+	}
+
+	if snap[0].Resource.Name != "First" {
+		t.Errorf("kept %q, want the first", snap[0].Resource.Name)
+	}
+}

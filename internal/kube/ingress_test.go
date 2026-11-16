@@ -15,6 +15,7 @@ func ing(ns, name, host, svc string, portNum int, portName string, ann map[strin
 		Host string `json:"host"`
 		HTTP struct {
 			Paths []struct {
+				Path    string `json:"path"`
 				Backend struct {
 					Service struct {
 						Name string `json:"name"`
@@ -29,6 +30,7 @@ func ing(ns, name, host, svc string, portNum int, portName string, ann map[strin
 	}{Host: host}
 
 	var path struct {
+		Path    string `json:"path"`
 		Backend struct {
 			Service struct {
 				Name string `json:"name"`
@@ -237,5 +239,53 @@ func TestRelativeProbeAnnotationIsStillAPath(t *testing.T) {
 
 	if want := "http://plex.plex.svc:32400/identity"; got[0].Check != want {
 		t.Errorf("Check = %q, want %q", got[0].Check, want)
+	}
+}
+
+// Two Ingresses splitting one host by path — the app on /, an authenticated
+// API on /api — are two tiles, not one drawn twice. The URL identifies a tile
+// downstream, so it has to carry the path.
+func TestPathSplitHostIsTwoResources(t *testing.T) {
+	public := ing("sched", "sched-public", "sched.example.com", "sched", 80, "", nil)
+	public.Spec.Rules[0].HTTP.Paths[0].Path = "/"
+
+	api := ing("sched", "sched-api", "sched.example.com", "sched", 80, "", nil)
+	api.Spec.Rules[0].HTTP.Paths[0].Path = "/api"
+
+	got := resourcesFrom([]ingress{api, public}, Options{AnnotationPrefix: prefix})
+
+	if len(got) != 2 {
+		t.Fatalf("got %d resources, want 2", len(got))
+	}
+
+	if got[0].URL != "https://sched.example.com/api" || got[0].Name != "Sched Api" {
+		t.Errorf("api = %q %q", got[0].URL, got[0].Name)
+	}
+
+	if got[1].URL != "https://sched.example.com" || got[1].Name != "Sched Public" {
+		t.Errorf("public = %q %q", got[1].URL, got[1].Name)
+	}
+}
+
+// A trailing slash is the same place, and a controller regex is not a place a
+// browser can go: both fall back to something linkable.
+func TestLinkPathNormalisation(t *testing.T) {
+	cases := map[string]string{
+		"":              "https://x.example.com",
+		"/":             "https://x.example.com",
+		"/api/":         "https://x.example.com/api",
+		"/docs/v2":      "https://x.example.com/docs/v2",
+		"/api(/|$)(.*)": "https://x.example.com",
+		"/static/.*":    "https://x.example.com",
+	}
+
+	for path, want := range cases {
+		in := ing("x", "x", "x.example.com", "x", 80, "", nil)
+		in.Spec.Rules[0].HTTP.Paths[0].Path = path
+
+		got := resourcesFrom([]ingress{in}, Options{AnnotationPrefix: prefix})
+		if got[0].URL != want {
+			t.Errorf("path %q: URL = %q, want %q", path, got[0].URL, want)
+		}
 	}
 }

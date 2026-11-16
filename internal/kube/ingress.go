@@ -28,6 +28,7 @@ type ingress struct {
 			Host string `json:"host"`
 			HTTP struct {
 				Paths []struct {
+					Path    string `json:"path"`
 					Backend struct {
 						Service struct {
 							Name string `json:"name"`
@@ -104,7 +105,7 @@ func resourcesFromWithPorts(items []ingress, ports portIndex, opt Options) []cat
 
 			res := catalog.Resource{
 				Name: firstNonEmpty(ann("name"), titleize(in.Metadata.Name)),
-				URL:  "https://" + rule.Host,
+				URL:  "https://" + rule.Host + linkPath(rule.HTTP.Paths),
 				// No default group. Namespace is the obvious candidate and a
 				// bad one: a cluster running one application per namespace
 				// would get seventeen sections of one tile each, which is not
@@ -131,6 +132,47 @@ func resourcesFromWithPorts(items []ingress, ports portIndex, opt Options) []cat
 	}
 
 	return out
+}
+
+// linkPath is the path a tile links to, appended to the host: empty for an
+// Ingress that serves the root, which is nearly all of them.
+//
+// Without it, two Ingresses splitting one host by path — a public app on / and
+// an authenticated API on /api, so forward-auth can be attached to one only —
+// both become https://host. The URL is what identifies a tile everywhere
+// downstream, so the pair collapsed into one entry drawn twice, with whichever
+// name happened to be written last.
+//
+// The first path with a backend is used, the same one the check is derived
+// from. A path that is not a plain URL path — a controller regex such as
+// /api(/|$)(.*) — is not something a browser can be sent to, and falls back
+// to the host rather than producing a link that cannot work.
+func linkPath(paths []struct {
+	Path    string `json:"path"`
+	Backend struct {
+		Service struct {
+			Name string `json:"name"`
+			Port struct {
+				Name   string `json:"name"`
+				Number int    `json:"number"`
+			} `json:"port"`
+		} `json:"service"`
+	} `json:"backend"`
+}) string {
+	for _, p := range paths {
+		if p.Backend.Service.Name == "" {
+			continue
+		}
+
+		path := strings.TrimRight(p.Path, "/")
+		if path == "" || !strings.HasPrefix(path, "/") || strings.ContainsAny(path, "()[]{}*+?|^$\\") {
+			return ""
+		}
+
+		return path
+	}
+
+	return ""
 }
 
 // checkURL builds the in-cluster URL to probe, from the Ingress backend.
